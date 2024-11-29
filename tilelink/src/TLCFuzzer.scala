@@ -47,17 +47,17 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
       case _: TLBundleA | _: TLBundleC | _: TLBundleE => None
       case other => Some(other)
     }
-    bOutput ++= txFromSlave.collect { case t: TLBundleB => t }
-    dOutput ++= txFromSlave.collect { case t: TLBundleD => t }
+    bOutput ++= txFromSlave.collect { case t: TLBundleB => t }.toSeq
+    dOutput ++= txFromSlave.collect { case t: TLBundleD => t }.toSeq
 
     // Get Channel D and B txns
-    val dComplete = getNextCompleteTLTxn(dOutput)
-    val bComplete = getNextCompleteTLTxn(bOutput)
+    val dComplete = getNextCompleteTLTxn(dOutput.toSeq)
+    val bComplete = getNextCompleteTLTxn(bOutput.toSeq)
     // D first as Release -> Probe dependency
     if (dComplete.isDefined) {
       dOutput.remove(0, dComplete.get.size)
       tlProcess ++= dComplete.get.filter({ x: TLChannel =>
-        val opCode = x.asInstanceOf[TLBundleD].opcode.litValue().toInt
+        val opCode = x.asInstanceOf[TLBundleD].opcode.litValue.toInt
         opCode == TLOpcodes.AccessAck || opCode == TLOpcodes.AccessAckData || opCode == TLOpcodes.Grant ||
           opCode == TLOpcodes.GrantData || opCode == TLOpcodes.ReleaseAck
       })
@@ -65,7 +65,7 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
     if (bComplete.isDefined) {
       bOutput.remove(0, bComplete.get.size)
       tlProcess ++= bComplete.get.filter({ x: TLChannel =>
-        val opCode = x.asInstanceOf[TLBundleB].opcode.litValue().toInt
+        val opCode = x.asInstanceOf[TLBundleB].opcode.litValue.toInt
         opCode == TLOpcodes.ProbePerm || opCode == TLOpcodes.ProbeBlock
       })
     }
@@ -78,8 +78,8 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
         case txnc: TLBundleB => // Always either ProbeBlock or ProbePerm
           if (!releaseInFlight) {
             // Calculating permissions
-            val oldPerm = permState.getPerm(txnc.address.litValue().toInt)
-            val newPerm = 2 - txnc.param.litValue().toInt
+            val oldPerm = permState.getPerm(txnc.address.litValue.toInt)
+            val newPerm = 2 - txnc.param.litValue.toInt
             var newParam = 0
 
             // If permissions are the same
@@ -95,24 +95,24 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
               }
 
               // Writing permissions
-              permState.setPerm(txnc.address.litValue().toInt, newPerm)
+              permState.setPerm(txnc.address.litValue.toInt, newPerm)
             }
 
             // Remove before return
             tlProcess.remove(processIndex)
-            if (txnc.opcode.litValue() == TLOpcodes.ProbePerm) {
+            if (txnc.opcode.litValue == TLOpcodes.ProbePerm) {
               // For ProbePerm, no ProbeAcKData needed
-              return Seq(ProbeAck(TLPermission.PruneOrReport.fromInt(newParam), txnc.address.litValue(), txnc.size.litValue().toInt,
-                source = txnc.source.litValue().toInt))
-            } else if (txnc.opcode.litValue() == TLOpcodes.ProbeBlock) {
+              return Seq(ProbeAck(TLPermission.PruneOrReport.fromInt(newParam), txnc.address.litValue, txnc.size.litValue.toInt,
+                source = txnc.source.litValue.toInt))
+            } else if (txnc.opcode.litValue == TLOpcodes.ProbeBlock) {
               // If old permission included write access, need to send back dirty data
               if (oldPerm == 2 && newPerm != oldPerm) {
-                return ProbeAckDataBurst(TLPermission.PruneOrReport.fromInt(newParam), txnc.address.litValue(),
-                  readData(dataState, size = txnc.size, address = txnc.address, mask = 0xff.U).map(_.litValue()),
-                  source = txnc.source.litValue().toInt)
+                return ProbeAckDataBurst(TLPermission.PruneOrReport.fromInt(newParam), txnc.address.litValue,
+                  readData(dataState, size = txnc.size, address = txnc.address, mask = 0xff.U).map(_.litValue),
+                  source = txnc.source.litValue.toInt)
               } else {
-                return Seq(ProbeAck(TLPermission.PruneOrReport.fromInt(newParam), txnc.address.litValue(), txnc.size.litValue().toInt,
-                  source = txnc.source.litValue().toInt))
+                return Seq(ProbeAck(TLPermission.PruneOrReport.fromInt(newParam), txnc.address.litValue, txnc.size.litValue.toInt,
+                  source = txnc.source.litValue.toInt))
               }
             }
           } else {
@@ -121,44 +121,44 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
           }
 
         case txnc: TLBundleD => // Always either Grant, GrantData, ReleaseAck, AccessAck, or AccessAckData
-          if (txnc.opcode.litValue() == TLOpcodes.Grant || txnc.opcode.litValue() == TLOpcodes.GrantData) {
+          if (txnc.opcode.litValue == TLOpcodes.Grant || txnc.opcode.litValue == TLOpcodes.GrantData) {
             if (!txnc.denied.litToBoolean) {
 
               // Writing Permissions
-              val newPerm = (2 - txnc.param.litValue().toInt)
+              val newPerm = (2 - txnc.param.litValue.toInt)
               permState.setPerm(acquireAddr, newPerm)
 
               // Writing Data
-              if (txnc.opcode.litValue() == TLOpcodes.GrantData) {
-                val beats = 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+              if (txnc.opcode.litValue == TLOpcodes.GrantData) {
+                val beats = 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
                 writeData(state = dataState, size = txnc.size, address = acquireAddr.U,
                   datas = tlProcess.dropRight(tlProcess.length - beats).map {
                     _.asInstanceOf[TLBundleD].data
-                  },
+                  }.toSeq,
                   masks = List.fill(beats)(0xff.U))
               }
 
               acquireInFlight = false
               inFlight = false
 
-              if (txnc.opcode.litValue() == TLOpcodes.GrantData) {
-                val beats = 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+              if (txnc.opcode.litValue == TLOpcodes.GrantData) {
+                val beats = 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
                 tlProcess.remove(processIndex, beats)
               } else {
                 tlProcess.remove(processIndex)
               }
 
-              return Seq(GrantAck(sink = txnc.sink.litValue().toInt))
+              return Seq(GrantAck(sink = txnc.sink.litValue.toInt))
             } else {
-              if (txnc.opcode.litValue() == TLOpcodes.GrantData) {
-                val beats = 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+              if (txnc.opcode.litValue == TLOpcodes.GrantData) {
+                val beats = 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
                 tlProcess.remove(processIndex, beats)
               } else {
                 tlProcess.remove(processIndex)
               }
             }
 
-          } else if (txnc.opcode.litValue() == TLOpcodes.ReleaseAck) {
+          } else if (txnc.opcode.litValue == TLOpcodes.ReleaseAck) {
             tlProcess.remove(processIndex)
 
             // Now able to queue up more releases
@@ -166,8 +166,8 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
             inFlight = false
           } else {
             // AccessAck and AccessAckData
-            if (txnc.opcode.litValue() == TLOpcodes.AccessAckData) {
-              val beats = 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+            if (txnc.opcode.litValue == TLOpcodes.AccessAckData) {
+              val beats = 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
               tlProcess.remove(processIndex, beats)
             } else {
               tlProcess.remove(processIndex)
@@ -179,7 +179,7 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
 
     // If nothing queued, check if there is manually generated txns to push
     if (manTxn.nonEmpty && queuedTLBundles.isEmpty) {
-      val complete = getNextCompleteTLTxn(manTxn)
+      val complete = getNextCompleteTLTxn(manTxn.toSeq)
       if (complete.isDefined) {
         queuedTLBundles ++= complete.get
         manTxn.remove(0, complete.get.size)
@@ -201,29 +201,29 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
       val txnHead = queuedTLBundles(inputIndex)
       txnHead match {
         case txnc: TLBundleA =>
-          if (txnc.opcode.litValue().toInt == TLOpcodes.AcquireBlock || txnc.opcode.litValue().toInt == TLOpcodes.AcquirePerm) {
+          if (txnc.opcode.litValue.toInt == TLOpcodes.AcquireBlock || txnc.opcode.litValue.toInt == TLOpcodes.AcquirePerm) {
             if (acquireInFlight || releaseInFlight) {
               inputIndex += 1
             } else {
-              acquireAddr = txnc.address.litValue().toInt
+              acquireAddr = txnc.address.litValue.toInt
               acquireInFlight = true
               inFlight = true
               return Seq(queuedTLBundles.remove(inputIndex))
             }
           } else {
-            val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+            val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
             val results = queuedTLBundles.dropRight(queuedTLBundles.length - beats)
             queuedTLBundles.remove(inputIndex, beats)
             inFlight = true
 
-            return results
+            return results.toSeq
           }
 
 
         case txnc: TLBundleC =>
           // Warning: May be invalid release if manually generated. TLTransactionGenerator should not generate invalid txns
-          if (txnc.opcode.litValue().toInt == TLOpcodes.Release || txnc.opcode.litValue().toInt == TLOpcodes.ReleaseData) {
-            val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+          if (txnc.opcode.litValue.toInt == TLOpcodes.Release || txnc.opcode.litValue.toInt == TLOpcodes.ReleaseData) {
+            val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
             if (acquireInFlight || releaseInFlight) {
               inputIndex += beats
             } else {
@@ -233,17 +233,17 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
               inFlight = true
 
               // Shrinking permissions
-              permState.setPerm(txnc.address.litValue().toInt, releasePermMap(txnc.param.litValue().toInt))
+              permState.setPerm(txnc.address.litValue.toInt, releasePermMap(txnc.param.litValue.toInt))
 
-              return result
+              return result.toSeq
             }
           } else {
-            val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue().toInt - log2Ceil(params.dataBits/8), 0)
+            val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
             val result = queuedTLBundles.dropRight(queuedTLBundles.length - beats)
             queuedTLBundles.remove(inputIndex, beats)
             inFlight = true
 
-            return result
+            return result.toSeq
           }
 
         case _: TLBundleE =>

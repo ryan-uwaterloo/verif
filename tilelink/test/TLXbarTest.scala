@@ -2,9 +2,9 @@ package verif
 
 import org.scalatest.flatspec.AnyFlatSpec
 import chiseltest._
-import chiseltest.experimental.TestOptionBuilder._
-import chiseltest.internal._
-import freechips.rocketchip.config.Parameters
+//import chiseltest.experimental.TestOptionBuilder._
+import chiseltest._
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy.LazyModule
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import TLTransaction._
@@ -90,7 +90,7 @@ class TLXbarTest extends AnyFlatSpec with ChiselScalatestTester {
 
       output.zip(outputRef).foreach {
         case (dut_out, sw_out) =>
-          assert(dut_out.litValue() == sw_out.litValue())
+          assert(dut_out.litValue == sw_out.litValue)
       }
     }
   }
@@ -173,12 +173,12 @@ class TLXbarTest extends AnyFlatSpec with ChiselScalatestTester {
 
       out1.zip(out1Ref).foreach {
         case (dut_out, sw_out) =>
-          assert(dut_out.litValue() == sw_out.litValue())
+          assert(dut_out.litValue == sw_out.litValue)
       }
 
       out2.zip(out2Ref).foreach {
         case (dut_out, sw_out) =>
-          assert(dut_out.litValue() == sw_out.litValue())
+          assert(dut_out.litValue == sw_out.litValue)
       }
     }
   }

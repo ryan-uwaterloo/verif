@@ -2,8 +2,8 @@ package verif
 
 import org.scalatest.flatspec.AnyFlatSpec
 import chiseltest._
-import chiseltest.experimental.TestOptionBuilder._
-import chiseltest.internal._
+//import chiseltest.experimental.TestOptionBuilder._
+import chiseltest._
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
 import TLTransaction._
 import chisel3.Clock

@@ -17,7 +17,7 @@ class TLDriverMaster(clock: Clock, interface: TLBundle) {
 
   def push(tx: Seq[TLChannel]): Unit = {
     tx.foreach { channel: TLChannel =>
-        assert(channel.isLit())
+        assert(channel.isLit)
         channel match {
           case a: TLBundleA =>
             val txProto = new DecoupledTX(new TLBundleA(params))
@@ -112,8 +112,8 @@ class TLMonitor(clock: Clock, interface: TLBundle, protocolChecker: Option[TLPro
       cMonitor.get.monitoredTransactions.clear()
       eMonitor.get.monitoredTransactions.clear()
     }
-    val res = tx.sortBy(_.cycleStamp.litValue())
-    if (protocolChecker.isDefined) {protocolChecker.get.check(res.map {_.data})}
-    res
+    val res = tx.sortBy(_.cycleStamp.litValue)
+    if (protocolChecker.isDefined) {protocolChecker.get.check(res.map {_.data}.toSeq)}
+    res.toSeq
   }
 }

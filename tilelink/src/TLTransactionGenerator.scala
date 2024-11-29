@@ -350,7 +350,7 @@ class TLTransactionGenerator(
       }
     }
 
-    genTxns
+    genTxns.toSeq
   }
 
   def reset() : Unit = {

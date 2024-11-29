@@ -30,15 +30,15 @@ class TLUFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
     var procResp = true
     while (procResp) {
       procResp = false
-      val txn = getNextCompleteTLTxn(respD).getOrElse(Seq())
+      val txn = getNextCompleteTLTxn(respD.toSeq).getOrElse(Seq())
       if (txn.nonEmpty) {
         respD.remove(0, txn.size)
         val head = txn.head.asInstanceOf[TLBundleD]
-        val source = head.source.litValue().toInt
-        if (head.opcode.litValue().toInt == TLOpcodes.AccessAck || head.opcode.litValue().toInt == TLOpcodes.AccessAckData) {
+        val source = head.source.litValue.toInt
+        if (head.opcode.litValue.toInt == TLOpcodes.AccessAck || head.opcode.litValue.toInt == TLOpcodes.AccessAckData) {
           if (sourceState.getOrElse(source, 0) != 1) println(s"ERROR: Unexpected AccessAck/Data response: $head")
           sourceState(source) = 0
-        } else if (head.opcode.litValue().toInt == TLOpcodes.HintAck) {
+        } else if (head.opcode.litValue.toInt == TLOpcodes.HintAck) {
           if (sourceState.getOrElse(source, 0) != 2) println(s"ERROR: Unexpected HintAck response: $head")
           sourceState(source) = 0
         } else {
@@ -54,15 +54,15 @@ class TLUFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
     }
 
     // Check legality of transaction
-    var dispatch = getNextCompleteTLTxn(queuedTxns).getOrElse(Seq())
+    var dispatch = getNextCompleteTLTxn(queuedTxns.toSeq).getOrElse(Seq())
     if (dispatch.nonEmpty) {
       val head = dispatch.head.asInstanceOf[TLBundleA]
-      val source = head.source.litValue().toInt
+      val source = head.source.litValue.toInt
       if (sourceState.getOrElse(source, 0) == 0) {
         // Remove from queue if taken from queue
         if (queuedTxns.nonEmpty) queuedTxns.remove(0, dispatch.size)
         // Updating state
-        val op = head.opcode.litValue().toInt
+        val op = head.opcode.litValue.toInt
         if (op <= TLOpcodes.Get) sourceState(source) = 1
         else if (op == TLOpcodes.Hint) sourceState(source) = 2
         else println(s"ERROR: Unknown TL-U request: $head")

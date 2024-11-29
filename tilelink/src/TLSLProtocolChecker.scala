@@ -10,40 +10,40 @@ import SL._
 trait TLMessageAP {
   // Channel A
   val IsGetOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.opcode.litValue() == TLOpcodes.Get; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.opcode.litValue == TLOpcodes.Get; case _: TLBundleD => false}})
   val IsPutFullOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.opcode.litValue() == TLOpcodes.PutFullData; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.opcode.litValue == TLOpcodes.PutFullData; case _: TLBundleD => false}})
   val IsPutPartialOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.opcode.litValue() == TLOpcodes.PutPartialData; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.opcode.litValue == TLOpcodes.PutPartialData; case _: TLBundleD => false}})
   val IsArithOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.opcode.litValue() == TLOpcodes.ArithmeticData; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.opcode.litValue == TLOpcodes.ArithmeticData; case _: TLBundleD => false}})
   val IsLogicOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.opcode.litValue() == TLOpcodes.LogicalData; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.opcode.litValue == TLOpcodes.LogicalData; case _: TLBundleD => false}})
   val IsHintOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.opcode.litValue() == TLOpcodes.Hint; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.opcode.litValue == TLOpcodes.Hint; case _: TLBundleD => false}})
 
   // Channel D
   val IsAccessAckOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case _: TLBundleA => false; case t: TLBundleD => t.opcode.litValue() == TLOpcodes.AccessAck}})
+    t match {case _: TLBundleA => false; case t: TLBundleD => t.opcode.litValue == TLOpcodes.AccessAck}})
   val IsAccessAckDataOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case _: TLBundleA => false; case t: TLBundleD => t.opcode.litValue() == TLOpcodes.AccessAckData}})
+    t match {case _: TLBundleA => false; case t: TLBundleD => t.opcode.litValue == TLOpcodes.AccessAckData}})
   val IsHintAckOp = qAP({ (t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case _: TLBundleA => false; case t: TLBundleD => t.opcode.litValue() == TLOpcodes.HintAck}})
+    t match {case _: TLBundleA => false; case t: TLBundleD => t.opcode.litValue == TLOpcodes.HintAck}})
 }
 
 trait TLStaticParameterAP {
   val ZeroParam = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.param.litValue() == 0; case t: TLBundleD => t.param.litValue() == 0}})
+    t match {case t: TLBundleA => t.param.litValue == 0; case t: TLBundleD => t.param.litValue == 0}})
   val ArithParam = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.param.litValue() >= 0 && t.param.litValue() <= 4; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.param.litValue >= 0 && t.param.litValue <= 4; case _: TLBundleD => false}})
   val LogicParam = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.param.litValue() >= 0 && t.param.litValue() <= 3; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.param.litValue >= 0 && t.param.litValue <= 3; case _: TLBundleD => false}})
   val HintParam = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.param.litValue() >= 0 && t.param.litValue() <= 1; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => t.param.litValue >= 0 && t.param.litValue <= 1; case _: TLBundleD => false}})
   val AlignedAddr = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => (t.address.litValue() & ((1 << t.size.litValue().toInt) - 1)) == 0; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => (t.address.litValue & ((1 << t.size.litValue.toInt) - 1)) == 0; case _: TLBundleD => false}})
   val ZeroCorrupt = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.corrupt.litValue() == 0; case t: TLBundleD => t.corrupt.litValue() == 0}})
+    t match {case t: TLBundleA => t.corrupt.litValue == 0; case t: TLBundleD => t.corrupt.litValue == 0}})
   val DeniedCorrupt = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
     t match {case _: TLBundleA => false; case t: TLBundleD => if (t.denied.litToBoolean) {t.corrupt.litToBoolean} else {true}}})
 }
@@ -51,18 +51,18 @@ trait TLStaticParameterAP {
 // Requires parameters
 trait TLDynamicParameterAP {
   def SizeWithinMaxTx(maxTransfer: Int) = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => t.size.litValue() >= 0 && t.size.litValue() <= log2Ceil(maxTransfer); case t: TLBundleD =>
-      t.size.litValue() >= 0 && t.size.litValue() <= log2Ceil(maxTransfer)}})
+    t match {case t: TLBundleA => t.size.litValue >= 0 && t.size.litValue <= log2Ceil(maxTransfer); case t: TLBundleD =>
+      t.size.litValue >= 0 && t.size.litValue <= log2Ceil(maxTransfer)}})
   def ContiguousMask(beatBytes: Int) = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
     t match {
       case t: TLBundleA =>
-        if (t.size.litValue() > log2Ceil(beatBytes)) {
-          (1 << beatBytes) - 1 == t.mask.litValue()
+        if (t.size.litValue > log2Ceil(beatBytes)) {
+          (1 << beatBytes) - 1 == t.mask.litValue
         } else {
           // Need to check all possible contiguous masks
-          val totalBytes = 1 << t.size.litValue().toInt
+          val totalBytes = 1 << t.size.litValue.toInt
           val possibleMasks = (0 to (beatBytes - totalBytes)).toList.map(i => ((1 << totalBytes) - 1) << i)
-          possibleMasks.map(mask => mask == t.mask.litValue()).foldLeft(false)(_ || _)
+          possibleMasks.map(mask => mask == t.mask.litValue).foldLeft(false)(_ || _)
         }
       case _ => false
     }
@@ -71,14 +71,14 @@ trait TLDynamicParameterAP {
   def MaskWithinSize(beatBytes: Int) = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
     t match {
       case t: TLBundleA =>
-        if (t.size.litValue() >= log2Ceil(beatBytes)) {
+        if (t.size.litValue >= log2Ceil(beatBytes)) {
           true
         } else {
-          val totalBytes = 1 << t.size.litValue().toInt
+          val totalBytes = 1 << t.size.litValue.toInt
           // Generates all aligned region of size (same as contiguous mask)
           val possibleMasks = (0 to (beatBytes - totalBytes)).toList.map(i => ((1 << totalBytes) - 1) << i)
           // Checking if any bits are outside of aligned regions
-          possibleMasks.map(mask => (t.mask.litValue() & ~mask) == 0).foldLeft(false)(_ || _)
+          possibleMasks.map(mask => (t.mask.litValue & ~mask) == 0).foldLeft(false)(_ || _)
         }
       case _ => false
     }
@@ -87,15 +87,15 @@ trait TLDynamicParameterAP {
 
 trait TLModelingAPs {
   val SaveSource = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => {h("source") = t.source.litValue().toInt; true}; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => {h("source") = t.source.litValue.toInt; true}; case _: TLBundleD => false}})
   val CheckSource = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case _: TLBundleA => false; case t: TLBundleD => h("source") == t.source.litValue()}})
+    t match {case _: TLBundleA => false; case t: TLBundleD => h("source") == t.source.litValue}})
   val SaveSize = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case t: TLBundleA => {h("size") = t.size.litValue().toInt; true}; case _: TLBundleD => false}})
+    t match {case t: TLBundleA => {h("size") = t.size.litValue.toInt; true}; case _: TLBundleD => false}})
   val CheckSize = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case _: TLBundleA => false; case t: TLBundleD => h("size") == t.size.litValue()}})
+    t match {case _: TLBundleA => false; case t: TLBundleD => h("size") == t.size.litValue}})
   val CheckData = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
-    t match {case _: TLBundleA => false; case t: TLBundleD => if (m.isDefined) m.get.get(0).litValue() == t.data.litValue() else true}})
+    t match {case _: TLBundleA => false; case t: TLBundleD => if (m.isDefined) m.get.get(0).litValue == t.data.litValue else true}})
 }
 
 trait TLMessageAPs extends TLMessageAP with TLStaticParameterAP with TLDynamicParameterAP {
@@ -116,8 +116,8 @@ trait BurstSizeAP {
     assert ((beatCount & (beatCount - 1)) == 0, s"beatCount must be a power of 2. Given: $beatCount")
     t match {
       case t: TLBundleA =>
-        if (beatCount == 1) t.size.litValue().toInt <= log2Ceil(beatBytes)
-        else t.size.litValue().toInt == log2Ceil(beatBytes) + log2Ceil(beatCount)
+        if (beatCount == 1) t.size.litValue.toInt <= log2Ceil(beatBytes)
+        else t.size.litValue.toInt == log2Ceil(beatBytes) + log2Ceil(beatCount)
       case _: TLBundleD => false
     }}, s"AD: If Size is $beatCount Beats")
 }
@@ -128,20 +128,20 @@ trait MiscAP {
   def CheckReqResp(beatBytes: Int, check: Boolean = false) = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
     t match {
       case t: TLBundleA =>
-        if (t.opcode.litValue() == TLOpcodes.PutFullData || t.opcode.litValue() == TLOpcodes.PutPartialData) {
+        if (t.opcode.litValue == TLOpcodes.PutFullData || t.opcode.litValue == TLOpcodes.PutPartialData) {
           // For burst requests (PutFull, PutPartial)
           if (h.getOrElse("burst_req", 0) != 0) h("burst_req") -= 1
           else {
             // If burst request, increment burst_req by number of remaining burst message (increments by 0 for non-burst reqs)
-            h("burst_req") = h.getOrElse("burst_req", 0) + (1 << scala.math.max(t.size.litValue().toInt - log2Ceil(beatBytes), 0)) - 1
+            h("burst_req") = h.getOrElse("burst_req", 0) + (1 << scala.math.max(t.size.litValue.toInt - log2Ceil(beatBytes), 0)) - 1
             h("expected_resp") = h.getOrElse("expected_resp", 0) + 1
           }
-        } else if (t.opcode.litValue() == TLOpcodes.ArithmeticData || t.opcode.litValue() == TLOpcodes.LogicalData || t.opcode.litValue() == TLOpcodes.Hint) {
+        } else if (t.opcode.litValue == TLOpcodes.ArithmeticData || t.opcode.litValue == TLOpcodes.LogicalData || t.opcode.litValue == TLOpcodes.Hint) {
           // For Atomic (Arith and Logic) Instructions + Hint, where there is exactly one response per request bundle
           h("expected_resp") = h.getOrElse("expected_resp", 0) + 1
         } else {
           // For Get: Response transactions scaled by request size
-          h("expected_resp") = h.getOrElse("expected_resp", 0) + (1 << scala.math.max(t.size.litValue().toInt - log2Ceil(beatBytes), 0))
+          h("expected_resp") = h.getOrElse("expected_resp", 0) + (1 << scala.math.max(t.size.litValue.toInt - log2Ceil(beatBytes), 0))
         }
       case _: TLBundleD => h("expected_resp") = h.getOrElse("expected_resp", 0) - 1 // Using .getOrElse as the first transaction could be a response (bad trace)
     }

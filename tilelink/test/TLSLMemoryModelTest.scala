@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals._
 import TLTransaction._
 import SL._
-import chipsalliance.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.tilelink.{TLBundleA, TLBundleD, TLBundleParameters, TLChannel}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -102,15 +102,15 @@ class TLSLMemoryModelTest extends AnyFlatSpec with ChiselScalatestTester {
     val getTxn = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
       t match {
         case t: TLBundleA =>
-          h("src") = t.source.litValue().toInt
-          t.size.litValue() == 4 && t.opcode.litValue() == TLOpcodes.Get
+          h("src") = t.source.litValue.toInt
+          t.size.litValue == 4 && t.opcode.litValue == TLOpcodes.Get
         case _ => false
       }}, "If Get transaction")
     val aADTxn = qAP({(t: TLChannel, h: HashMap[String, Int], m: Option[SLMemoryState[UInt]]) =>
       t match {
         case t: TLBundleD =>
-          t.size.litValue() == 4 && t.source.litValue().toInt == h("src") && t.opcode.litValue() == TLOpcodes.AccessAckData &&
-            t.data.litValue() == m.get.get(0).litValue()
+          t.size.litValue == 4 && t.source.litValue.toInt == h("src") && t.opcode.litValue == TLOpcodes.AccessAckData &&
+            t.data.litValue == m.get.get(0).litValue
         case _ => false
       }}, "If Access Ack Data transaction")
     val dataTwoBeatProp = qProp[TLChannel, Int, UInt](getTxn + Implies + ###(1,-1) + aADTxn + ###(1,-1) + aADTxn)

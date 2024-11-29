@@ -2,9 +2,9 @@ package verif
 
 import org.scalatest.flatspec.AnyFlatSpec
 import chiseltest._
-import chiseltest.experimental.TestOptionBuilder._
-import chiseltest.internal.{TreadleBackendAnnotation, WriteVcdAnnotation}
-import freechips.rocketchip.config.Parameters
+//import chiseltest.experimental.TestOptionBuilder._
+import chiseltest.{TreadleBackendAnnotation, WriteVcdAnnotation}
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy.LazyModule
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.tilelink.{ReadPattern, TLBundleD, TLBundleParameters, TLChannel, WritePattern}

@@ -11,58 +11,58 @@ import scala.math.ceil
 package object TLUtils {
   // Helper functions for message checking
   def aligned(data : UInt, base : UInt) : Boolean = {
-    val dataI = data.litValue()
-    val baseI = base.litValue() - 1
+    val dataI = data.litValue
+    val baseI = base.litValue - 1
     ((dataI & baseI) == 0) && contiguous(baseI.U)
   }
 
   def alignedLg(data : UInt, base : UInt) : Boolean = {
-    aligned(data, (1 << base.litValue().toInt).U)
+    aligned(data, (1 << base.litValue.toInt).U)
   }
 
   def contiguousMask(mask : UInt, size : UInt, beatBytes: Int) : Boolean = {
-    if (size.litValue() > log2Ceil(beatBytes)) {
-      (1 << beatBytes) - 1 == mask.litValue()
+    if (size.litValue > log2Ceil(beatBytes)) {
+      (1 << beatBytes) - 1 == mask.litValue
     } else {
       // Need to check all possible contiguous masks
-      val totalBytes = 1 << size.litValue().toInt
+      val totalBytes = 1 << size.litValue.toInt
       val possibleMasks = (0 to (beatBytes - totalBytes)).toList.map(i => ((1 << totalBytes) - 1) << i)
-      possibleMasks.map(pmask => pmask == mask.litValue()).foldLeft(false)(_ || _)
+      possibleMasks.map(pmask => pmask == mask.litValue).foldLeft(false)(_ || _)
     }
   }
 
   def maskWithinSize(mask: UInt, size: UInt, beatBytes: Int): Boolean = {
-    if (size.litValue() > log2Ceil(beatBytes)) {
-      (1 << beatBytes) > mask.litValue()
+    if (size.litValue > log2Ceil(beatBytes)) {
+      (1 << beatBytes) > mask.litValue
     } else {
-      (1 << (1 << size.litValue().toInt)) > mask.litValue()
+      (1 << (1 << size.litValue.toInt)) > mask.litValue
     }
   }
 
   def contiguous(data : UInt) : Boolean = {
-    val dataI = data.litValue()
+    val dataI = data.litValue
     ((dataI + 1) & ~dataI) == (dataI + 1)
   }
 
   def contains(sizes: TransferSizes, x: UInt) : Boolean = {
-    (x.litValue() >= sizes.min && x.litValue() <= sizes.max && isPow2(x.litValue()))
+    (x.litValue >= sizes.min && x.litValue <= sizes.max && isPow2(x.litValue))
   }
 
   def containsLg(sizes: TransferSizes, lg: UInt) : Boolean = {
-    contains(sizes, (1 << lg.litValue().toInt).U)
+    contains(sizes, (1 << lg.litValue.toInt).U)
   }
 
   // Helper method to get size of TLChannel
   def getTLBundleDataSizeBytes (bnd : TLChannel): Int = {
     bnd match {
       case bndc: TLBundleA =>
-        1 << bndc.size.litValue().toInt
+        1 << bndc.size.litValue.toInt
       case bndc: TLBundleB =>
-        1 << bndc.size.litValue().toInt
+        1 << bndc.size.litValue.toInt
       case bndc: TLBundleC =>
-        1 << bndc.size.litValue().toInt
+        1 << bndc.size.litValue.toInt
       case bndc: TLBundleD =>
-        1 << bndc.size.litValue().toInt
+        1 << bndc.size.litValue.toInt
       case _: TLBundleE =>
         1
     }
@@ -73,16 +73,16 @@ package object TLUtils {
     bnd match {
       case bndc: TLBundleA =>
         // Get, AcquireBlock, AcquirePerm
-        (bndc.opcode.litValue() == 4 || bndc.opcode.litValue() == 5 || bndc.opcode.litValue() == 6 || bndc.opcode.litValue() == 7)
+        (bndc.opcode.litValue == 4 || bndc.opcode.litValue == 5 || bndc.opcode.litValue == 6 || bndc.opcode.litValue == 7)
       case bndc: TLBundleB =>
         // Get, ProbeBlock, ProbePerm
-        (bndc.opcode.litValue() == 4 || bndc.opcode.litValue() == 5 || bndc.opcode.litValue() == 6 || bndc.opcode.litValue() == 7)
+        (bndc.opcode.litValue == 4 || bndc.opcode.litValue == 5 || bndc.opcode.litValue == 6 || bndc.opcode.litValue == 7)
       case bndc: TLBundleC =>
         // AccessAck, ProbeAck, Release
-        (bndc.opcode.litValue() == 0 || bndc.opcode.litValue() == 4 || bndc.opcode.litValue() == 6)
+        (bndc.opcode.litValue == 0 || bndc.opcode.litValue == 4 || bndc.opcode.litValue == 6)
       case bndc: TLBundleD =>
         // AccessAck, Grant, ReleaseAck
-        (bndc.opcode.litValue() == 0 || bndc.opcode.litValue() == 4 || bndc.opcode.litValue() == 6)
+        (bndc.opcode.litValue == 0 || bndc.opcode.litValue == 4 || bndc.opcode.litValue == 6)
       case _: TLBundleE =>
         // Always single message
         true
@@ -91,7 +91,7 @@ package object TLUtils {
 
   // Helper function to map size -> # of beats
   def sizeToBeats (size : UInt, beatBytes : Int = 8): Int = {
-    val sizeInt = 1 << size.litValue().toInt
+    val sizeInt = 1 << size.litValue.toInt
     ceil(sizeInt / beatBytes.toDouble).toInt
   }
 
@@ -158,7 +158,7 @@ package object TLUtils {
   }
 
   def toByteMask(mask : UInt) : BigInt = {
-    var maskInt = mask.litValue()
+    var maskInt = mask.litValue
     var result: BigInt = 0
     var i = 0
     do {
@@ -174,13 +174,13 @@ package object TLUtils {
 
   // Repeat Permissions for given size
   def permRepeater(size: UInt, perm: UInt, beatBytes : Int = 8) : List[UInt] = {
-    val sizeInt = 1 << size.litValue().toInt
+    val sizeInt = 1 << size.litValue.toInt
     var tempResult: BigInt = 0
     var resultList = mutable.ListBuffer[UInt]()
     var reset = true
 
     for (i <- 0 until sizeInt) {
-      tempResult = (tempResult << 8) | perm.litValue()
+      tempResult = (tempResult << 8) | perm.litValue
       reset = false
 
       // Separating into separate beats
@@ -201,8 +201,8 @@ package object TLUtils {
 
   // State is a byte-addressed HashMap
   def readData(state: mutable.HashMap[Int,Int], size: UInt, address: UInt, mask: UInt, beatBytes: Int = 8): List[UInt] = {
-    val sizeInt = 1 << size.litValue().toInt
-    val addressInt = address.litValue().toInt
+    val sizeInt = 1 << size.litValue.toInt
+    val addressInt = address.litValue.toInt
     val byteMask = toByteMask(mask)
     var tempResult: BigInt = 0
     var resultList = mutable.ListBuffer[UInt]()
@@ -230,8 +230,8 @@ package object TLUtils {
 
   // State is a byte-addressed HashMap
   def writeData(state: mutable.HashMap[Int,Int], size: UInt, address: UInt, datas: Seq[UInt], masks: Seq[UInt], beatBytes: Int = 8): Unit = {
-    val sizeInt = 1 << size.litValue().toInt
-    val addressInt = address.litValue().toInt
+    val sizeInt = 1 << size.litValue.toInt
+    val addressInt = address.litValue.toInt
     var allData: BigInt = 0
     var allMask: BigInt = 0
 
@@ -239,7 +239,7 @@ package object TLUtils {
 
     // Condensing all data and masks
     for (i <- 0 until datas.length) {
-      allData = allData | (datas(i).litValue() << (beatBytes * 8 * i))
+      allData = allData | (datas(i).litValue << (beatBytes * 8 * i))
       allMask = allMask | (toByteMask(masks(i)) << (beatBytes * 8 * i))
     }
 

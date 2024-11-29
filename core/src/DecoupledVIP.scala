@@ -30,7 +30,7 @@ class DecoupledTX[T <: Data](gen: T) extends Bundle {
     this.Lit(_.data -> data, _.waitCycles -> (scala.util.Random.nextInt(randomWaitCycles._2) + randomWaitCycles._1).U)
   }
 
-  override def cloneType: this.type = (new DecoupledTX(gen)).asInstanceOf[this.type]
+  //override def cloneType: this.type = (new DecoupledTX(gen)).asInstanceOf[this.type]
 }
 
 // TODO: combine driver and monitor into VIP/Agent to keep API clean
@@ -45,8 +45,8 @@ class DecoupledDriverMaster[T <: Data](clock: Clock, interface: DecoupledIO[T]) 
     while (true) {
       if (inputTransactions.nonEmpty && idleCycles == 0) {
         val t = inputTransactions.dequeue()
-        if (t.waitCycles.litValue().toInt > 0) {
-          idleCycles = t.waitCycles.litValue().toInt
+        if (t.waitCycles.litValue.toInt > 0) {
+          idleCycles = t.waitCycles.litValue.toInt
           while (idleCycles > 0) {
             idleCycles -= 1
             cycleCount += 1
@@ -72,7 +72,7 @@ class DecoupledDriverMaster[T <: Data](clock: Clock, interface: DecoupledIO[T]) 
           clock.step()
         }
 
-        idleCycles = t.postSendCycles.litValue().toInt
+        idleCycles = t.postSendCycles.litValue.toInt
       } else {
         if (idleCycles > 0) idleCycles -= 1
         cycleCount += 1

@@ -2,12 +2,12 @@ package verif
 
 import chisel3._
 import chiseltest._
-import chiseltest.experimental.TestOptionBuilder._
+//import chiseltest.experimental.TestOptionBuilder._
 import SL._
 import chisel3.experimental.BundleLiterals._
 import TLTransaction._
-import chipsalliance.rocketchip.config.Parameters
-import chiseltest.internal.WriteVcdAnnotation
+import org.chipsalliance.cde.config.Parameters
+//import chiseltest.internal.WriteVcdAnnotation
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.tilelink.{TLBundleA, TLBundleD, TLBundleParameters, TLChannel}
@@ -41,11 +41,11 @@ class TLSLRAMTraceMutationTest extends AnyFlatSpec with ChiselScalatestTester {
       case t: TLBundleA =>
         // Should be able to mutate any field, but for now just address
         new TLBundleA(params).Lit(_.opcode -> t.opcode, _.param -> t.param, _.size -> t.size, _.source -> t.source,
-          _.address -> (t.address.litValue() + r.nextInt(100)).U, _.mask -> t.mask, _.corrupt -> t.corrupt, _.data -> t.data)
+          _.address -> (t.address.litValue + r.nextInt(100)).U, _.mask -> t.mask, _.corrupt -> t.corrupt, _.data -> t.data)
       case t: TLBundleD =>
         // Should be able to mutate any field, but for now just data + opcode (in case data is ignored)
-        new TLBundleD(params).Lit(_.opcode -> (t.opcode.litValue() & r.nextInt(2)).U, _.param -> t.param, _.size -> t.size, _.source -> t.source,
-          _.sink -> t.sink, _.denied -> t.denied, _.corrupt -> t.corrupt, _.data -> (t.data.litValue() + r.nextInt(100)).U)
+        new TLBundleD(params).Lit(_.opcode -> (t.opcode.litValue & r.nextInt(2)).U, _.param -> t.param, _.size -> t.size, _.source -> t.source,
+          _.sink -> t.sink, _.denied -> t.denied, _.corrupt -> t.corrupt, _.data -> (t.data.litValue + r.nextInt(100)).U)
     }
   }
 
@@ -72,10 +72,10 @@ class TLSLRAMTraceMutationTest extends AnyFlatSpec with ChiselScalatestTester {
       txnTrace.copyToBuffer(mutTxnTrace)
       val idx = r.nextInt(txnTrace.size)
       mutTxnTrace.insert(idx, Put(0x0,0x1234))
-      badTrace = mutTxnTrace
+      badTrace = mutTxnTrace.toSeq
 
       // Check that mutated transaction trace fails
-      assert(!protocolChecker.check(mutTxnTrace, Some(new TLSLMemoryModel(TLBundleParameters(dut.mPortParams, dut.bridge.edges.out.head.slave)))))
+      assert(!protocolChecker.check(mutTxnTrace.toSeq, Some(new TLSLMemoryModel(TLBundleParameters(dut.mPortParams, dut.bridge.edges.out.head.slave)))))
     }
   }
 
@@ -100,7 +100,7 @@ class TLSLRAMTraceMutationTest extends AnyFlatSpec with ChiselScalatestTester {
       mutTxnTrace.remove(idx)
 
       // Check that mutated transaction trace fails
-      assert(!protocolChecker.check(mutTxnTrace, Some(new TLSLMemoryModel(TLBundleParameters(dut.mPortParams, dut.bridge.edges.out.head.slave)))))
+      assert(!protocolChecker.check(mutTxnTrace.toSeq, Some(new TLSLMemoryModel(TLBundleParameters(dut.mPortParams, dut.bridge.edges.out.head.slave)))))
     }
   }
 
@@ -128,7 +128,7 @@ class TLSLRAMTraceMutationTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       // Check that mutated transaction trace fails
-      assert(!protocolChecker.check(mutTxnTrace, Some(new TLSLMemoryModel(TLBundleParameters(dut.mPortParams, dut.bridge.edges.out.head.slave)))))
+      assert(!protocolChecker.check(mutTxnTrace.toSeq, Some(new TLSLMemoryModel(TLBundleParameters(dut.mPortParams, dut.bridge.edges.out.head.slave)))))
     }
   }
 

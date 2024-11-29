@@ -64,7 +64,7 @@ class TLRegBankTest extends AnyFlatSpec with ChiselScalatestTester {
 
       output.zip(swoutput).foreach {
         case (dutOut, swOut) =>
-          assert(dutOut.data.litValue() == swOut.data.litValue())
+          assert(dutOut.data.litValue == swOut.data.litValue)
       }
     }
   }

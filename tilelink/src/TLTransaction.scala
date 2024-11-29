@@ -529,19 +529,19 @@ package object TLTransaction {
   }
 
   case class Mismatch(idx: Int, field: String, expected: chisel3.Data, actual:chisel3.Data) {
-    override def toString: String = f"MISMATCH Index: $idx%05d Field: $field Expected: ${expected.litValue()}%#x Got: ${actual.litValue()}%#x"
+    override def toString: String = f"MISMATCH Index: $idx%05d Field: $field Expected: ${expected.litValue}%#x Got: ${actual.litValue}%#x"
   }
 
   def findMismatch(idx: Int, dut: TLBundleD, gold: TLBundleD): Seq[Mismatch] = {
-    if (dut.opcode.litValue() != gold.opcode.litValue()) {
+    if (dut.opcode.litValue != gold.opcode.litValue) {
       Seq(Mismatch(idx, dut.opcode.name, gold.opcode, dut.opcode))
     } else {
       val fieldsToCompare = Seq[TLBundleD => chisel3.UInt](t => t.param, t => t.size, t => t.source, t => t.sink, t => t.denied)
-      dut.opcode.litValue().toInt match {
+      dut.opcode.litValue.toInt match {
         case TLOpcodes.AccessAck =>
           fieldsToCompare.foldLeft(Seq.empty[Mismatch]) {
             case (mismatches, fieldFn) =>
-              if (fieldFn(dut).litValue() != fieldFn(gold).litValue()) {
+              if (fieldFn(dut).litValue != fieldFn(gold).litValue) {
                 mismatches :+ Mismatch(idx, fieldFn(dut).name, fieldFn(gold), fieldFn(dut))
               } else {
                 mismatches
@@ -551,7 +551,7 @@ package object TLTransaction {
           val dataFields = fieldsToCompare ++ Seq[TLBundleD => chisel3.UInt](t => t.data, t => t.corrupt)
           dataFields.foldLeft(Seq.empty[Mismatch]) {
             case (mismatches, fieldFn) =>
-              if (fieldFn(dut).litValue() != fieldFn(gold).litValue()) {
+              if (fieldFn(dut).litValue != fieldFn(gold).litValue) {
                 mismatches :+ Mismatch(idx, fieldFn(dut).name, fieldFn(gold), fieldFn(dut))
               } else {
                 mismatches

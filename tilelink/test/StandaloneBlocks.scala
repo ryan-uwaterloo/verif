@@ -1,13 +1,13 @@
 package verif
 
 import chisel3._
-import freechips.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.regmapper._
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.tilelink.TLRegisterNode
-import sifive.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
+import paarp_chisel.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
 
 object DefaultTLParams {
   def slave: TLSlavePortParameters = TLSlavePortParameters.v1(
@@ -244,14 +244,16 @@ class L2Standalone(implicit p: Parameters = new WithoutTLMonitors) extends LazyM
       ways = 2,
       sets = 2,
       blockBytes = 32,
-      beatBytes = 8),
+      beatBytes = 8,
+      hintsSkipProbe = false),
     InclusiveCacheMicroParameters(writeBytes = 8),
     None
   ))
   val cork = LazyModule(new TLCacheCork)
 
   // IO Connections (Master and Slave are directly connected)
-  val ioInNode = BundleBridgeSource(() => TLBundle(bParams(0)))
+  //print(bParams(0))
+  val ioInNode = BundleBridgeSource[TLBundle](() => TLBundle(bParams(0)))
   val ioOutNode = BundleBridgeSink[TLBundle]()
   val in = InModuleBody { ioInNode.makeIO() }
   val out = InModuleBody { ioOutNode.makeIO() }

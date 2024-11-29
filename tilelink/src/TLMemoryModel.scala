@@ -12,22 +12,22 @@ class TLMemoryModel(p: TLBundleParameters, maskReads: Boolean = false) extends T
 
     tx match {
       case txA: TLBundleA =>
-        val byteAddr = txA.address.litValue()
+        val byteAddr = txA.address.litValue
         // Int-division truncates
         val wordAddr = (byteAddr / bytesPerWord).toLong
-        val wordsToProcess = ceil(pow(2, txA.size.litValue().toInt) / bytesPerWord).toInt
+        val wordsToProcess = ceil(pow(2, txA.size.litValue.toInt) / bytesPerWord).toInt
 
-        txA.opcode.litValue().toInt match {
+        txA.opcode.litValue.toInt match {
           case TLOpcodes.Get =>
             val responseTxs = (0 until wordsToProcess).map {
-              wordIdx => TLMemoryModel.read(state.mem, wordAddr + wordIdx, bytesPerWord, txA.mask.litValue().toInt, maskReads)
+              wordIdx => TLMemoryModel.read(state.mem, wordAddr + wordIdx, bytesPerWord, txA.mask.litValue.toInt, maskReads)
             }.map {
-              word => AccessAckData(word, txA.size.litValue().toInt, txA.source.litValue().toInt, denied=false)
+              word => AccessAckData(word, txA.size.litValue.toInt, txA.source.litValue.toInt, denied=false)
             }
             (responseTxs, state)
           case TLOpcodes.PutPartialData | TLOpcodes.PutFullData =>
-            val writeData = txA.data.litValue()
-            val writeMask = txA.mask.litValue().toInt
+            val writeData = txA.data.litValue
+            val writeMask = txA.mask.litValue.toInt
             // We're currently in a write burst
             if (state.burstStatus.isDefined) {
               val burstStatus = state.burstStatus.get
@@ -41,35 +41,35 @@ class TLMemoryModel(p: TLBundleParameters, maskReads: Boolean = false) extends T
             } else {
               val newMem = TLMemoryModel.write(state.mem, wordAddr, writeData, writeMask, bytesPerWord)
               if (wordsToProcess == 1) { // Single beat write
-                (Seq(AccessAck(txA.size.litValue().toInt, txA.source.litValue().toInt)), state.copy(mem = newMem))
+                (Seq(AccessAck(txA.size.litValue.toInt, txA.source.litValue.toInt)), state.copy(mem = newMem))
               } else { // Starting a burst
                 val burstStatus = TLMemoryModel.BurstStatus(wordAddr, 1, wordsToProcess)
-                (Seq(AccessAck(txA.size.litValue().toInt, txA.source.litValue().toInt)), state.copy(mem = newMem, burstStatus = Some(burstStatus)))
+                (Seq(AccessAck(txA.size.litValue.toInt, txA.source.litValue.toInt)), state.copy(mem = newMem, burstStatus = Some(burstStatus)))
               }
             }
           case TLOpcodes.LogicalData | TLOpcodes.ArithmeticData =>
-            val writeMask = txA.mask.litValue().toInt
+            val writeMask = txA.mask.litValue.toInt
             // We're currently in a write burst
             if (state.burstStatus.isDefined) {
               val burstStatus = state.burstStatus.get
-              val readData = TLMemoryModel.read(state.mem, burstStatus.baseAddr + burstStatus.currentBeat, bytesPerWord, txA.mask.litValue().toInt, maskReads)
-              val writeData = TLMemoryModel.dataToWrite(readData, txA.data.litValue(), txA.opcode.litValue().toInt, txA.param.litValue().toInt)
+              val readData = TLMemoryModel.read(state.mem, burstStatus.baseAddr + burstStatus.currentBeat, bytesPerWord, txA.mask.litValue.toInt, maskReads)
+              val writeData = TLMemoryModel.dataToWrite(readData, txA.data.litValue, txA.opcode.litValue.toInt, txA.param.litValue.toInt)
               val newMem = TLMemoryModel.write(state.mem, burstStatus.baseAddr + burstStatus.currentBeat, writeData, writeMask, bytesPerWord)
               val newBurstStatus = if ((burstStatus.currentBeat + 1) == burstStatus.totalBeats) {
                 None
               } else {
                 Some(burstStatus.copy(currentBeat = burstStatus.currentBeat + 1))
               }
-              (Seq(AccessAckData(readData, txA.size.litValue().toInt, txA.source.litValue().toInt, denied = false)), state.copy(mem = newMem, burstStatus = newBurstStatus))
+              (Seq(AccessAckData(readData, txA.size.litValue.toInt, txA.source.litValue.toInt, denied = false)), state.copy(mem = newMem, burstStatus = newBurstStatus))
             } else {
-              val readData = TLMemoryModel.read(state.mem, wordAddr, bytesPerWord, txA.mask.litValue().toInt, maskReads)
-              val writeData = TLMemoryModel.dataToWrite(readData, txA.data.litValue(), txA.opcode.litValue().toInt, txA.param.litValue().toInt)
+              val readData = TLMemoryModel.read(state.mem, wordAddr, bytesPerWord, txA.mask.litValue.toInt, maskReads)
+              val writeData = TLMemoryModel.dataToWrite(readData, txA.data.litValue, txA.opcode.litValue.toInt, txA.param.litValue.toInt)
               val newMem = TLMemoryModel.write(state.mem, wordAddr, writeData, writeMask, bytesPerWord)
               if (wordsToProcess == 1) { // Single beat read-modify-write
-                (Seq(AccessAckData(readData, txA.source.litValue().toInt)), state.copy(mem = newMem))
+                (Seq(AccessAckData(readData, txA.source.litValue.toInt)), state.copy(mem = newMem))
               } else { // Starting a burst
                 val burstStatus = TLMemoryModel.BurstStatus(wordAddr, 1, wordsToProcess)
-                (Seq(AccessAckData(readData, txA.size.litValue().toInt, txA.source.litValue().toInt, denied = false)), state.copy(mem = newMem, burstStatus = Some(burstStatus)))
+                (Seq(AccessAckData(readData, txA.size.litValue.toInt, txA.source.litValue.toInt, denied = false)), state.copy(mem = newMem, burstStatus = Some(burstStatus)))
               }
             }
           case _ => ???
@@ -95,7 +95,7 @@ object TLMemoryModel {
   object State {
     def empty(): State = State(Map[WordAddr, Array[Byte]](), None)
     def init(mem: Map[WordAddr, BigInt], bytesPerWord: Int): State =
-      State(mem.mapValues(v => padBigEndian(v, bytesPerWord)), None)
+      State(mem.mapValues(v => padBigEndian(v, bytesPerWord)).toMap, None)
   }
 
   private def maskToBigEndian(mask: Int, bytesPerWord: Int): Seq[Int] = {

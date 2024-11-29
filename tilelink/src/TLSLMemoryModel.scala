@@ -16,7 +16,7 @@ class SLOptTLMemoryState(init: UInt = 0.U) extends SLMemoryState[UInt] {
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case t: SLOptTLMemoryState => this.int_state.litValue() == t.int_state.litValue()
+      case t: SLOptTLMemoryState => this.int_state.litValue == t.int_state.litValue
       case _ => false
     }
   }
@@ -36,11 +36,11 @@ class TLSLMemoryModel(p: TLBundleParameters) extends SLMemoryModel[TLChannel, UI
     for (resp <- responseTxns) {
       resp match {
         case txnd: TLBundleD =>
-          if (txnd.opcode.litValue() == TLOpcodes.AccessAckData) {
-            if (!dataBuffer.contains(txnd.source.litValue().toInt)) {
-              dataBuffer(txnd.source.litValue().toInt) = new Queue[UInt]()
+          if (txnd.opcode.litValue == TLOpcodes.AccessAckData) {
+            if (!dataBuffer.contains(txnd.source.litValue.toInt)) {
+              dataBuffer(txnd.source.litValue.toInt) = new Queue[UInt]()
             }
-            dataBuffer(txnd.source.litValue().toInt).enqueue(txnd.data)
+            dataBuffer(txnd.source.litValue.toInt).enqueue(txnd.data)
           }
         case _ => // Do nothing
       }
@@ -50,12 +50,12 @@ class TLSLMemoryModel(p: TLBundleParameters) extends SLMemoryModel[TLChannel, UI
     for (txn <- input) {
       txn match {
         case txnd: TLBundleD =>
-          if (txnd.opcode.litValue() == TLOpcodes.AccessAckData) {
-            if (dataBuffer(txnd.source.litValue().toInt).isEmpty) {
+          if (txnd.opcode.litValue == TLOpcodes.AccessAckData) {
+            if (dataBuffer(txnd.source.litValue.toInt).isEmpty) {
               // Here to catch exceptions (for bad traces)
               result = result :+ Some(new SLOptTLMemoryState(0.U))
             } else {
-              result = result :+ Some(new SLOptTLMemoryState(dataBuffer(txnd.source.litValue().toInt).dequeue()))
+              result = result :+ Some(new SLOptTLMemoryState(dataBuffer(txnd.source.litValue.toInt).dequeue()))
             }
           } else {
             result = result :+ None

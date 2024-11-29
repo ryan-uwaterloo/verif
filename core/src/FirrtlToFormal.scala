@@ -6,7 +6,7 @@ package verif
 
 import maltese.smt
 import firrtl.annotations.DeletedAnnotation
-import firrtl.backends.experimental.smt.ExpressionConverter
+//import firrtl.backends.experimental.smt.ExpressionConverter
 import firrtl.options.{Dependency, TargetDirAnnotation}
 import firrtl.{AnnotationSeq, ir}
 import firrtl.stage.{FirrtlCircuitAnnotation, FirrtlStage, OutputFileAnnotation, RunFirrtlTransformAnnotation}
@@ -16,7 +16,8 @@ import logger.{LogLevel, LogLevelAnnotation}
 import maltese.mc.TransitionSystem
 
 object FirrtlToFormal  {
-  def apply(c: ir.Circuit, annos: AnnotationSeq, ll: LogLevel.Value = LogLevel.Error): (TransitionSystem, AnnotationSeq) = {
+  //def apply(c: ir.Circuit, annos: AnnotationSeq, ll: LogLevel.Value = LogLevel.Error): (TransitionSystem, AnnotationSeq) = {
+  def apply(c: ir.Circuit, annos: AnnotationSeq, ll: LogLevel.Value = LogLevel.Error): (AnnotationSeq) = {
     // TODO: ensure that firrtl.transforms.formal.AssertSubmoduleAssumptions is not run!
 
     val testDir = BackendCompilationUtilities.createTestDirectory(c.main + "_to_btor2")
@@ -35,7 +36,8 @@ object FirrtlToFormal  {
     // TODO: prevent btor file from being generated
     val btorFile = testDir.getAbsolutePath + s"/${name.get}.btor2"
 
-    val sys = ExpressionConverter.toMaltese(resAnnos).getOrElse(throw new RuntimeException("Failed to find transition system annotation!"))
-    (sys, resAnnos)
+    //val sys = ExpressionConverter.toMaltese(resAnnos).getOrElse(throw new RuntimeException("Failed to find transition system annotation!"))
+    //(sys, resAnnos)
+    (resAnnos)
   }
 }

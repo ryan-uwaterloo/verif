@@ -6,7 +6,7 @@ package firrtl.backends.experimental.smt
 
 import firrtl.ir
 
-object FirrtlToSMT {
-  def toWidth(tpe: ir.Type): Int = FirrtlExpressionSemantics.getWidth(tpe)
+// object FirrtlToSMT {
+//   def toWidth(tpe: ir.Type): Int = FirrtlExpressionSemantics.getWidth(tpe)
 
-}
+// }

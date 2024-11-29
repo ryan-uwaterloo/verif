@@ -33,10 +33,10 @@ trait Transaction extends IgnoreSeqInBundle { this: Bundle =>
             case _:Clock | _:Reset | _:Analog | _:AsyncReset | _:EnumType | _:ResetType => ???
             case bits: Bits =>
               bits match {
-                case uint: UInt => uint.isLit() && theirElem.asInstanceOf[UInt].isLit() &&
-                  uint.litValue() == theirElem.asInstanceOf[UInt].litValue()
-                case sint: SInt => sint.isLit() && theirElem.asInstanceOf[SInt].isLit() &&
-                  sint.litValue() == theirElem.asInstanceOf[SInt].litValue()
+                case uint: UInt => uint.isLit && theirElem.asInstanceOf[UInt].isLit &&
+                  uint.litValue == theirElem.asInstanceOf[UInt].litValue
+                case sint: SInt => sint.isLit && theirElem.asInstanceOf[SInt].isLit &&
+                  sint.litValue == theirElem.asInstanceOf[SInt].litValue
                 case fp: FixedPoint => ???
                 case interval: Interval => ???
               }

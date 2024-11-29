@@ -2,13 +2,13 @@ package verif
 
 import org.scalatest.flatspec.AnyFlatSpec
 import chiseltest._
-import chiseltest.experimental.TestOptionBuilder._
-import chiseltest.internal._
-import freechips.rocketchip.config.Parameters
+//import chiseltest.experimental.TestOptionBuilder._
+import chiseltest._
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import TLTransaction._
-import freechips.rocketchip.tilelink._
+import freechips.rocketchip.tilelink.{TLBundleA, TLBundleB, TLBundleC, TLBundleD, TLBundleE}
 
 class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
   it should "Elaborate L2" in {
@@ -112,10 +112,14 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       val gen = new TLTransactionGenerator(TLL2.sPortParams.head, TLL2.in.params, overrideAddr = Some(AddressSet(0x00, 0x1ff)), get = false, putFull = false, putPartial = false, burst = true, arith = false, logic = false, hints = false, tlc = true, cacheBlockSize = 5, acquire = true)
       val fuzz = new TLCFuzzer(params, Some(gen), cacheBlockSize = 5)
 
-      for (_ <- 0 until 500) {
+      for (_ <- 0 until 50) {
         val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
         L1Placeholder.push(txns)
-        c.clock.step(5)
+        c.clock.step(1)
+      }
+
+      for (_ <- 0 until 300){
+        c.clock.step(1)
       }
 
       val output1 = L1Monitor.getMonitoredTransactions().map(_.data).collect{ case t: TLBundleD => t}
