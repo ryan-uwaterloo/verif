@@ -5,12 +5,13 @@ import verif.TLUtils._
 import verif.TLTransaction._
 import chisel3._
 import chisel3.util.log2Ceil
+import freechips.rocketchip.diplomacy._
 
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 // TL Transaction Fuzzer that follows TL-C protocol
 // Note: Currently only supports one acquire and release in-flight at a given time. Can be extended.
-class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerator], forceTxn: Seq[TLTransaction] = Seq(), cacheBlockSize: Int) {
+class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerator], forceTxn: Seq[TLTransaction] = Seq(), cacheBlockSize: Int, idRange: IdRange = IdRange(0, 3)) {
   implicit val p = params
 
   // Internal Structures TODO Hardcoded BlockSize
@@ -23,9 +24,16 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
 
   // Used for acquire addressing (!!! supports only one acquire in-flight) TODO use source as IDs
   var acquireInFlight = false
+  // work on changing this to multi-flight
+  //println(s"params: $params \n")//params do not contain address range, LOL
+  println(s"idRange: $idRange \n")//bring it in separately.
+  var acquires_in_flight = List.fill(idRange.end - idRange.start + 1)(false).to(ListBuffer)//false per address
   var acquireAddr = 0
   // Used for release addressing (!!! supports only one release in-flight) TODO use source as IDs
   var releaseInFlight = false
+  // I think I'm going to leave this alone for now...
+  //nvm I need to
+  var releases_in_flight = List.fill(idRange.end - idRange.start + 1)(false).to(ListBuffer)//false per address
   // Temporary for non-concurrent operations, will remove constraint later
   var inFlight = false
   // Keep track of which txns have been forced (manually generated)
@@ -76,7 +84,8 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
       val txn = tlProcess(processIndex)
       txn match {
         case txnc: TLBundleB => // Always either ProbeBlock or ProbePerm
-          if (!releaseInFlight) {
+          // if (!releaseInFlight) {
+          if (!releases_in_flight(txnc.source.litValue.toInt)) {
             // Calculating permissions
             val oldPerm = permState.getPerm(txnc.address.litValue.toInt)
             val newPerm = 2 - txnc.param.litValue.toInt
@@ -138,7 +147,8 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
                   masks = List.fill(beats)(0xff.U))
               }
 
-              acquireInFlight = false
+              acquireInFlight = false//convert this
+              acquires_in_flight(txnc.source.litValue.toInt) = false //:eyes: I think this works???
               inFlight = false
 
               if (txnc.opcode.litValue == TLOpcodes.GrantData) {
@@ -162,7 +172,8 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
             tlProcess.remove(processIndex)
 
             // Now able to queue up more releases
-            releaseInFlight = false
+            // releaseInFlight = false
+            releases_in_flight(txnc.source.litValue.toInt) = false
             inFlight = false
           } else {
             // AccessAck and AccessAckData
@@ -195,18 +206,21 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
     // Determining next transaction to be pushed
     // Currently limit inFlight instructions, will expand soon
     var inputIndex = 0
-    while (!inFlight && inputIndex < queuedTLBundles.length) {
+//    while (!inFlight && inputIndex < queuedTLBundles.length) {
+    while (inputIndex < queuedTLBundles.length) {
 
       // Extra processessing for AcquireBlock/Perm (A), Release/Data (C), GrantAck (E)
       val txnHead = queuedTLBundles(inputIndex)
       txnHead match {
         case txnc: TLBundleA =>
           if (txnc.opcode.litValue.toInt == TLOpcodes.AcquireBlock || txnc.opcode.litValue.toInt == TLOpcodes.AcquirePerm) {
-            if (acquireInFlight || releaseInFlight) {
+            // if (acquireInFlight || releaseInFlight) {
+            if (acquires_in_flight(txnc.source.litValue.toInt) || releases_in_flight(txnc.source.litValue.toInt)) {            
               inputIndex += 1
             } else {
               acquireAddr = txnc.address.litValue.toInt
-              acquireInFlight = true
+              //acquireInFlight = true
+              acquires_in_flight(txnc.source.litValue.toInt) = true
               inFlight = true
               return Seq(queuedTLBundles.remove(inputIndex))
             }
@@ -224,12 +238,14 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
           // Warning: May be invalid release if manually generated. TLTransactionGenerator should not generate invalid txns
           if (txnc.opcode.litValue.toInt == TLOpcodes.Release || txnc.opcode.litValue.toInt == TLOpcodes.ReleaseData) {
             val beats = if (isNonBurst(txnHead)) 1 else 1 << math.max(txnc.size.litValue.toInt - log2Ceil(params.dataBits/8), 0)
-            if (acquireInFlight || releaseInFlight) {
+            // if (acquireInFlight || releaseInFlight) {
+            if (acquires_in_flight(txnc.source.litValue.toInt) || releases_in_flight(txnc.source.litValue.toInt)) {
               inputIndex += beats
             } else {
               val result = queuedTLBundles.dropRight(queuedTLBundles.length - beats)
               queuedTLBundles.remove(inputIndex, beats)
-              releaseInFlight = true
+              // releaseInFlight = true
+              releases_in_flight(txnc.source.litValue.toInt) = true
               inFlight = true
 
               // Shrinking permissions

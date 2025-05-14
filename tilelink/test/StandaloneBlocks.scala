@@ -7,7 +7,8 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.regmapper._
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.tilelink.TLRegisterNode
-import paarp_chisel.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
+import parrp_chisel.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
+import boom.lsu._
 
 object DefaultTLParams {
   def slave: TLSlavePortParameters = TLSlavePortParameters.v1(
@@ -24,7 +25,7 @@ object DefaultTLParams {
     ),
     beatBytes = 8)
 
-  def master(name: String = "TLMasterPort", idRange: IdRange = IdRange(0,1)): TLMasterPortParameters = TLMasterPortParameters.v1(
+  def master(name: String = "TLMasterPort", idRange: IdRange = IdRange(0,3)): TLMasterPortParameters = TLMasterPortParameters.v1(
     Seq(
       TLMasterParameters.v1(name = name, sourceId = idRange)
     ))
@@ -50,17 +51,48 @@ object DefaultTLParams {
   def masterCache: TLMasterPortParameters = TLMasterPortParameters.v1(
     Seq(
       TLMasterParameters.v1(
-        name = "TestBundle",
+        name = "Core 0 Test Bundle",
         supportsProbe = TransferSizes(1, 32),
         supportsGet = TransferSizes(1, 32),
         supportsPutFull = TransferSizes(1, 32),
         supportsPutPartial = TransferSizes(1, 32),
         supportsLogical = TransferSizes(1, 32),
         supportsArithmetic = TransferSizes(1, 32),
-        supportsHint = TransferSizes(1, 32)
+        supportsHint = TransferSizes(1, 32),
+        sourceId = IdRange(0, 5)//this is the sourceID range used by our test harness.
+      ),
+      TLMasterParameters.v1(
+        name = "Core 1 Test Bundle",
+        supportsProbe = TransferSizes(1, 32),
+        supportsGet = TransferSizes(1, 32),
+        supportsPutFull = TransferSizes(1, 32),
+        supportsPutPartial = TransferSizes(1, 32),
+        supportsLogical = TransferSizes(1, 32),
+        supportsArithmetic = TransferSizes(1, 32),
+        supportsHint = TransferSizes(1, 32),
+        sourceId = IdRange(6, 10)//this is the sourceID range used by our test harness.
       )
     ))
 }
+// Object ParRPTLParams {
+//   def slaveCache: TLSlavePortParameters = TLSlavePortParameters.v1(
+//     Seq(
+//       TLSlaveParameters.v1(
+//         address = Seq(AddressSet(0x0, 0xffffffff)),
+//         supportsGet = TransferSizes(1, 32),
+//         supportsPutFull = TransferSizes(1, 32),
+//         supportsPutPartial = TransferSizes(1, 32),
+//         supportsLogical = TransferSizes(1, 32),
+//         supportsArithmetic = TransferSizes(1, 32),
+//         supportsHint = TransferSizes(1, 32),
+//         supportsAcquireB = TransferSizes(1, 32),
+//         supportsAcquireT = TransferSizes(1, 32),
+//         regionType = RegionType.UNCACHED
+//       )
+//     ),
+//     endSinkId = 1, beatBytes = 8  
+//   )
+// }
 
 class TLRegBankStandalone(
   mPortParams: TLMasterPortParameters = DefaultTLParams.master(),
@@ -201,7 +233,7 @@ class XBarToMultiRAMStandalone(implicit p: Parameters = new WithoutTLMonitors) e
 // TL Multi-Master Xbar RAM Slave Node Standalone
 class XbarToRAMMultiMasterStandalone(implicit p: Parameters = new WithoutTLMonitors) extends LazyModule {
   val mPortParams = Seq(
-    DefaultTLParams.master("one", IdRange(0, 1)),
+    DefaultTLParams.master("one", IdRange(0, 4)),
     DefaultTLParams.master("two", IdRange(1, 2))
   )
   val sPortParams = Seq(DefaultTLParams.slave, DefaultTLParams.slave)
@@ -237,12 +269,15 @@ class L2Standalone(implicit p: Parameters = new WithoutTLMonitors) extends LazyM
   val sPortParams = Seq(DefaultTLParams.slaveCache, DefaultTLParams.slave)
   val bParams = (mPortParams zip sPortParams).map{ case (m, s) => TLBundleParameters(m, s)}
 
+  println(s"mPortParams $mPortParams \n")
+  println(s"bParams: $bParams \n")
+
   // Instantiating L2 Cache (Inclusive Cache)
   val l2 = LazyModule(new InclusiveCache(
     CacheParameters(
       level = 2,
-      ways = 2,
-      sets = 2,
+      ways = 8,
+      sets = 4,
       blockBytes = 32,
       beatBytes = 8,
       hintsSkipProbe = false),

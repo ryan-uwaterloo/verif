@@ -8,6 +8,12 @@ import freechips.rocketchip.tilelink._
 import scala.collection.mutable
 import scala.math.ceil
 
+import scala.io.Source
+import scala.collection.mutable.ListBuffer
+import TLTransaction._
+import chisel3.experimental.BundleLiterals._
+
+
 package object TLUtils {
   // Helper functions for message checking
   def aligned(data : UInt, base : UInt) : Boolean = {
@@ -282,5 +288,106 @@ package object TLUtils {
     def getState: mutable.HashMap[Int,Int] = {
       intState
     }
+  }
+
+  def CSVReadAllWithHeaders(fileStream: java.io.InputStream): Seq[Map[String, String]] = {
+    val source = Source.fromInputStream(fileStream)
+    try {
+      val lines = source.getLines().toSeq
+      if (lines.isEmpty) return Seq.empty // Return empty if the file is empty
+
+      val headers = lines.head.split(",").map(_.trim)
+      lines.tail.map { line =>
+        val values = line.split(",").map(_.trim)
+        headers.zip(values).toMap
+      }
+    } finally {
+      source.close()
+    }
+  }
+
+  def getOpcodeMap(channel: String): Map[String, Int] ={
+    val mapping = channel match{
+      case "A" => TLMessages.a.zipWithIndex.map { case ((key, _), idx) => key -> idx }.toMap
+      case "B" => TLMessages.b.zipWithIndex.map { case ((key, _), idx) => key -> idx }.toMap
+      case "C" => TLMessages.c.zipWithIndex.map { case ((key, _), idx) => key -> idx }.toMap
+      case "D" => TLMessages.d.zipWithIndex.map { case ((key, _), idx) => key -> idx }.toMap
+      case _ => Map(("GrantAck" -> 0))//includes E, we won't think too hard about x atm.
+    }
+    mapping
+  }
+
+  def createTransaction(channel: String, opcode: Int, param: Int, source: Int, address: BigInt, data: BigInt, bundleParams : TLBundleParameters): TLChannel = {
+
+    implicit val p: TLBundleParameters = bundleParams
+    if(channel == "A"){
+      // if(opcode == 0){
+      //   return(TLBundleA(opcode))
+      // } else if (opcode == 1){
+      //   return(Put(source = source, addr = address, data = data, mask = 255))
+      // } else if (opcode == 6) {
+      //   return(AcquireBlock(param = TLPermission.Grow.NtoT, addr = address, source = source, size = 5))
+      // } else {
+      //   return(AcquirePerm(param = TLPermission.Grow.NtoT, addr = address, source = source, size = 5))
+      // }
+      new TLBundleA(bundleParams).Lit(
+      _.opcode -> opcode.U,
+      _.param -> param.U,
+      _.size -> 3.U,
+      _.source -> source.U,
+      _.address -> address.U,
+      _.mask -> 255.U,
+      _.corrupt -> 0.B,
+      _.data -> data.U
+      )
+    } else if (channel == "C"){
+      //return(ProbeAckData(param = TLPermission.PruneOrReport.TtoN, data = data, addr = address, source = source, size = 5))
+      new TLBundleC(bundleParams).Lit(
+        _.opcode -> opcode.U,
+        _.param -> param.U,
+        _.size -> 3.U,
+        _.source -> source.U,
+        _.address -> address.U,
+        //_.mask -> 255.U,
+        _.corrupt -> 0.B,
+        _.data -> data.U
+      )
+    } else {
+      return(GrantAck(0))
+    }
+    
+    //(TLBundleA(opcode=UInt<3>(0), param=UInt<3>(0), size=UInt<3>(3), source=UInt<1>(0), address=UInt<12>(4), user=BundleMap(), echo=BundleMap(), mask=UInt<8>(255), data=UInt<64>(57005), corrupt=Bool(false)))
+//TLBundleA(opcode=UInt<3>(0), param=UInt<3>(0), size=UInt<3>(3), source=UInt<1>(0), address=UInt<12>(4), user=BundleMap(), echo=BundleMap(), mask=UInt<8>(255), data=UInt<64>(57005), corrupt=Bool(false))
+    // else if (channel == "C"){
+
+    // } else if (channel == "D"){
+
+    // } else if (channel == "E"){
+
+    // }
+  }
+
+
+  def CSVtoTL(fileStream: java.io.InputStream, params: TLBundleParameters):  Seq[TLChannel]= {
+    //val reader = CSVReader.open(new File(filePath))
+    //print(filePath)
+    val rows = CSVReadAllWithHeaders(fileStream) 
+    var messages = Seq[TLChannel]()
+    rows.foreach{ row =>
+      //println(row)
+      val channel = row("channel")
+      val opcodeMap = getOpcodeMap(channel)
+      val opcode = opcodeMap.getOrElse(row("opcode"), 0) // Default to 0 if not found
+      val param = row.get("param").map(_.toInt).getOrElse(0)
+      val source = row.get("source").map(_.toInt).getOrElse(0)
+      val address = row.get("address").map { s: String => BigInt(s.stripPrefix("0x"), 16) }.getOrElse(BigInt(0))
+      val data = row.get("data").map{ s: String => BigInt(s.stripPrefix("0x"), 16) }.getOrElse(BigInt(0))
+
+      val txn = createTransaction(channel, opcode, param, source, address, data, params)
+      println(txn)
+      messages = messages :+ txn
+    }
+    //reader.close()
+    messages
   }
 }
