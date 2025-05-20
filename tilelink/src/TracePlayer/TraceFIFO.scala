@@ -8,12 +8,12 @@ import chisel3.util._
   * taken from schoeberl's chisel examples :)
   */
 
-class TraceFifoIO[T <: Data](private val gen: T) extends Bundle {
+class TraceFifoIO(private val gen: Bundle) extends Bundle {
   val enq = Flipped(new DecoupledIO(gen))
   val deq = new DecoupledIO(gen)
 }
 
-class TraceFifo[T <: Data](gen: T, depth: Int){
+class TraceFifo(gen: Bundle, depth: Int) extends Module{
   val io = IO(new TraceFifoIO(gen))
   assert(depth > 0, "Number of buffer elements needs to be larger than 0")
 

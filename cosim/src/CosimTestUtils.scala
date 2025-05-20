@@ -7,7 +7,10 @@ package verif
 import chisel3._
 import chisel3.experimental.BundleLiterals._
 import chiseltest.experimental.{sanitizeFileName}
-import freechips.rocketchip.config._
+import chipyard._ //maybe this replaces it..?
+import org.chipsalliance.cde.config.{Config}
+import org.chipsalliance.cde.config.Parameters
+// import freechips.rocketchip.config._ //not present
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.prci.ClockSinkParameters
 import freechips.rocketchip.rocket._
@@ -17,8 +20,8 @@ import freechips.rocketchip.tilelink._
 import java.io.{ByteArrayOutputStream, PrintWriter}
 import org.scalatest._
 import org.scalatest.TestSuite
-import reflect.runtime._
-import scala.collection.JavaConversions._
+import scala.reflect.runtime._ //not present
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.io.File
 import scala.sys.process._
@@ -83,7 +86,7 @@ object VerifProtoBufUtils {
 
     // Extract fields from the protobuf
     val protoArgs = collection.mutable.Map[String, Any]()
-    proto.getAllFields.foreach { case (field, value) =>
+    proto.getAllFields.forEach { case (field, value) =>
       val fieldName = field.getName
       field.getType match {
         case MESSAGE =>
@@ -107,7 +110,8 @@ object VerifProtoBufUtils {
           typ match {
             case t if t =:= typeOf[chisel3.UInt] => 0.U
             case t if t =:= typeOf[chisel3.Bool] => false.B
-            case t if t =:= typeOf[freechips.rocketchip.config.Parameters] => p
+            case t if t =:= typeOf[org.chipsalliance.cde.config.Parameters] => p
+            //case t if t =:= typeOf[freechips.rocketchip.config.Parameters] => p
           })
       }
 
@@ -125,18 +129,36 @@ object VerifProtoBufUtils {
   }
 
   def BundleToJson[B <: Bundle](bundle: B): String = {
-    bundle.elements.map { case (name, value) =>
-      value match {
-        case _: Bundle => s""" "${name}": { ${BundleToJson(value.asInstanceOf[Bundle])} }"""
-        case _: Bool => s""""${name}": ${value.asInstanceOf[Bool].litToBoolean}"""
-        case _: UInt => value.asInstanceOf[UInt].getWidth match { // Values wider than 64.W are stored as hex strings
-          case x if x > 64 => s""""${name}": "${String.format(s"%${math.ceil(x.toDouble / 4).toInt}s", value.litValue.toString(16).toUpperCase).replace(" ", "0")}""""
-          case _ => s""""${name}": ${value.litValue}"""
+  bundle.elements.map { case (name, value) =>
+    value match {
+      case sub: Bundle =>
+        s""""$name": { ${BundleToJson(sub)} }"""
+
+      case b: Bool =>
+        val boolStr = b.litOption.map(_ != 0).getOrElse {
+          println(s"[warn] Bool $name is not a literal — inserting false")
+          false
         }
-        case _ => s""""${name}": ${value.litValue}"""
-      }
-    }.mkString(",\n")
-  }
+        s""""$name": $boolStr"""
+
+      case u: UInt =>
+        u.litOption match {
+          case Some(value) =>
+            if (u.getWidth > 64)
+              s""""$name": "${String.format(s"%${math.ceil(u.getWidth / 4.0).toInt}s", value.toString(16).toUpperCase).replace(" ", "0")}""""
+            else
+              s""""$name": $value"""
+          case None =>
+            println(s"[warn] UInt $name is not a literal — inserting 0")
+            s""""$name": 0"""
+        }
+
+      case _ =>
+        s""""$name": "unsupported""""
+    }
+  }.mkString(",\n")
+}
+
 }
 
 object VerifBundleUtils {
@@ -157,13 +179,13 @@ object VerifBundleUtils {
                     uxl: UInt = 0.U, sd_rv32: Bool = false.B, zero1: UInt = 0.U, tsr: Bool = false.B,
                     tw: Bool = false.B, tvm: Bool = false.B, mxr: Bool = false.B, sum: Bool = false.B,
                     mprv: Bool = false.B, xs: UInt = 0.U, fs: UInt = 0.U, mpp: UInt = 0.U, vs: UInt = 0.U,
-                    spp: UInt = 0.U, mpie: Bool = false.B, hpie: Bool = false.B, spie: Bool = false.B,
+                    spp: UInt = 0.U, mpie: Bool = false.B, ube: Bool = false.B, spie: Bool = false.B,
                     upie: Bool = false.B, mie: Bool = false.B, hie: Bool = false.B, sie: Bool = false.B,
                     uie: Bool = false.B)(implicit p: Parameters): MStatus = {
     new MStatus().Lit(_.debug -> debug, _.cease -> cease, _.wfi -> wfi, _.isa -> isa, _.dprv -> dprv, _.prv -> prv,
       _.sd -> sd, _.zero2 -> zero2, _.sxl -> sxl, _.uxl -> uxl, _.sd_rv32 -> sd_rv32, _.zero1 -> zero1, _.tsr -> tsr,
       _.tw -> tw, _.tvm -> tvm, _.mxr -> mxr, _.sum -> sum, _.mprv -> mprv, _.xs -> xs, _.fs -> fs, _.mpp -> mpp,
-      _.vs -> vs, _.spp -> spp, _.mpie -> mpie, _.hpie -> hpie, _.spie -> spie, _.upie -> upie, _.mie -> mie,
+      _.vs -> vs, _.spp -> spp, _.mpie -> mpie, _.ube -> ube, _.spie -> spie, _.upie -> upie, _.mie -> mie,
       _.hie -> hie, _.sie -> sie, _.uie -> uie)
   }
 
@@ -193,6 +215,9 @@ case object VerifTileParams extends TileParams {
   val btb: Option[BTBParams] = None
   val dcache: Option[DCacheParams] = Some(DCacheParams(rowBits=128)) // TODO: can these be derived from beat bytes, etc
   val icache: Option[ICacheParams] = Some(ICacheParams(rowBits=128))
+  val baseName: String = "Verif Tile"
+  val uniqueName: String = "Verif Tile 0"
+  val tileId: Int = 0
 }
 
 class VerifBaseRocketConfig extends Config(
