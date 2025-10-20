@@ -4,4 +4,7 @@ A       ,AcquireBlock ,    0 ,     1 ,0x080   ,0x0801
 A       ,AcquireBlock ,    0 ,     2 ,0x100   ,0x1001
 A       ,AcquireBlock ,    0 ,     3 ,0x180   ,0x1801
 C       ,ReleaseData  ,    0 ,     0 ,0x000   ,0xf00d
+C       ,ReleaseData  ,    0 ,     0 ,0x000   ,0xbeef
+C       ,ReleaseData  ,    0 ,     0 ,0x000   ,0x3eed
+C       ,ReleaseData  ,    0 ,     0 ,0x000   ,0xb055
 A       ,AcquireBlock ,    0 ,     4 ,0x200   ,0x2001

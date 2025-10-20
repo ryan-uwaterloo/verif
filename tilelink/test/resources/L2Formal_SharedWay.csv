@@ -8,7 +8,16 @@ A       ,AcquireBlock ,    0 ,     6 ,0x280   ,0x2001
 A       ,AcquireBlock ,    0 ,     7 ,0x300   ,0x2001
 A       ,AcquireBlock ,    0 ,     8 ,0x380   ,0x2001
 C       ,ReleaseData  ,    2 ,     0 ,0x080   ,0xbee5
+C       ,ReleaseData  ,    2 ,     0 ,0x080   ,0xbeef
+C       ,ReleaseData  ,    2 ,     0 ,0x080   ,0x3eed
+C       ,ReleaseData  ,    2 ,     0 ,0x080   ,0xb055
 C       ,ReleaseData  ,    2 ,     9 ,0x200   ,0x2020
+C       ,ReleaseData  ,    2 ,     9 ,0x200   ,0x2021
+C       ,ReleaseData  ,    2 ,     9 ,0x200   ,0x2022
+C       ,ReleaseData  ,    2 ,     9 ,0x200   ,0x2023
 C       ,ReleaseData  ,    2 ,     8 ,0x300   ,0x3000
+C       ,ReleaseData  ,    2 ,     8 ,0x300   ,0x3001
+C       ,ReleaseData  ,    2 ,     8 ,0x300   ,0x3002
+C       ,ReleaseData  ,    2 ,     8 ,0x300   ,0x3003
 A       ,AcquireBlock ,    0 ,     6 ,0x000   ,0x0002
 A       ,AcquireBlock ,    0 ,     7 ,0x480   ,0x1002

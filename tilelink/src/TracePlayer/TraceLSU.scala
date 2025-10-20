@@ -73,7 +73,7 @@ class TLSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   //val ptw   = new rocket.TLBPTWIO
   val dmem  = new LSUDMemIO
   val fifo = Flipped(Decoupled(new BoomDCacheReq))
-
+  val ack = Output(Valid(new AckBundle))
   //val hellacache = Flipped(new freechips.rocketchip.rocket.HellaCacheIO)
 }
 
@@ -101,39 +101,47 @@ class TraceLSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // defaults
   io.dmem.brupdate       := DontCare 
   io.dmem.brupdate.b2.valid := false.B //this should remove all branching from dcache
+  io.dmem.brupdate.b2.target_offset := 0.S
   io.dmem.exception      := false.B
   io.dmem.rob_head_idx   := DontCare //only for implementing a fence
   io.dmem.rob_pnr_idx    := DontCare //dontCare?
+  io.dmem.release.ready  := true.B
+
+  io.ack.valid := false.B
+  io.ack.bits.addr := DontCare
+  io.ack.bits.load_n_store := false.B
 
   val dmem_req = Wire(Vec(memWidth, Valid(new BoomDCacheReq)))
-  io.dmem.req.valid := dmem_req.map(_.valid).reduce(_||_) //have req ready in fifo
+  val dmem_req_valid = dmem_req.map(_.valid).reduce(_||_) //have req ready in fifo
+  io.dmem.req.valid := dmem_req_valid
   io.dmem.req.bits  := dmem_req //fifo
+
+  val dmem_resp_fired_reg = RegNext(io.dmem.resp(0).valid)
 
   for (w <- 0 until memWidth) {
     dmem_req(w).valid := false.B
-    dmem_req(w).bits.uop   := NullMicroOp
+    dmem_req(w).bits.uop   := NullMicroOp()
     dmem_req(w).bits.addr  := 0.U
     dmem_req(w).bits.data  := 0.U
     dmem_req(w).bits.is_hella := false.B
 
     io.dmem.s1_kill(w) := false.B
   }
+    val dmem_resp_fired = WireInit(widthMap(w => false.B))
 
     //crush this state machine into a fifo
 
     //this is the bits we need to pass in
-    dmem_req(0).valid := io.fifo.valid
+    dmem_req(0).valid := io.fifo.valid & ~io.dmem.resp.map(_.valid).reduce(_||_) & ~dmem_resp_fired_reg(0)
+    dontTouch(dmem_req(0).valid)
     dmem_req(0).bits.uop := io.fifo.bits.uop
     dmem_req(0).bits.addr := io.fifo.bits.addr
     dmem_req(0).bits.data := io.fifo.bits.data
     
   // Handle Memory Responses and nacks
   //----------------------------------
-  
-  val dmem_resp_fired = WireInit(widthMap(w => false.B))
-  io.fifo.ready := dmem_resp_fired(0) || !io.fifo.valid //when we complete a txn, load next txn... right? also step though fifo when there is not a valid txn at head :)
-  //I'm kinda theorizing that we'll end up re-issuing the request and all that due to how often things are with the delay and stuff...
-  io.dmem.s1_kill := dmem_resp_fired(0) //I think this fixes things but idk
+  io.fifo.ready := (~dmem_resp_fired(0) && dmem_resp_fired_reg(0)) || ~io.fifo.valid //when we complete a txn, load next txn... right? also step though fifo when there is not a valid txn at head :)
+  // issue next transaction after ack stops being asserted to deal with long acks
 
   for (w <- 0 until memWidth) {
     // Handle nacks, or can we just hold it valid..? let's ignore everything because I'm lazy lol
@@ -161,16 +169,23 @@ class TraceLSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Handle the response... I think this is sufficient.
     when (io.dmem.resp(w).valid)
     {
+      io.ack.valid := true.B
+      io.ack.bits.addr := io.fifo.bits.addr
       when (io.dmem.resp(w).bits.uop.uses_ldq)
       {
+        io.ack.bits.load_n_store := true.B
         assert(!io.dmem.resp(w).bits.is_hella)
         dmem_resp_fired(w) := true.B
+        // pending_req := false.B
       }
         .elsewhen (io.dmem.resp(w).bits.uop.uses_stq)
       {
+        io.ack.bits.load_n_store := false.B
         assert(!io.dmem.resp(w).bits.is_hella)
         dmem_resp_fired(w) := true.B
+        // pending_req := false.B
       }
+      assert(io.dmem.resp(w).bits.uop.uses_stq | io.dmem.resp(w).bits.uop.uses_ldq)
     }
   }
 }

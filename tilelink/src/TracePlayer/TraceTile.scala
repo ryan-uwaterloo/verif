@@ -6,7 +6,7 @@
 package verif.etrace
 
 import chisel3._
-import chisel3.util.{RRArbiter, Queue}
+import chisel3.util._
 
 import scala.collection.mutable.{ListBuffer}
 
@@ -29,6 +29,9 @@ import boom.util.{BoomCoreStringPrefix}
 import boom.common._
 import freechips.rocketchip.prci.ClockSinkParameters
 
+trait CanAccessInterrupts { this: TraceTile =>
+  def interruptNode = intXbar.intnode
+}
 
 case class TraceTileAttachParams(
   tileParams: TraceTileParams,
@@ -38,6 +41,16 @@ case class TraceTileAttachParams(
   val lookup = PriorityMuxHartIdFromSeq(Seq(tileParams))
 }
 
+class AckBundle extends Bundle{
+  val load_n_store = Bool()
+  val addr = UInt(32.W)
+}
+
+class TraceIO(implicit p: Parameters) extends Bundle{
+  val in = Flipped(Decoupled(new BoomDCacheReq))
+  val out = Valid(new AckBundle)
+}
+
 
 /**
  * BOOM tile parameter class used in configurations
@@ -45,8 +58,8 @@ case class TraceTileAttachParams(
  */
 case class TraceTileParams(
   core: BoomCoreParams = BoomCoreParams(),
-  icache: Option[ICacheParams] = Some(ICacheParams()),
-  dcache: Option[DCacheParams] = Some(DCacheParams()),
+  icache: Option[ICacheParams] = Some(ICacheParams(blockBytes = 32)),
+  dcache: Option[DCacheParams] = Some(DCacheParams(blockBytes = 32)),
   btb: Option[BTBParams] = Some(BTBParams()),
   name: Option[String] = Some("trace_tile"),
   tileId: Int = 0
@@ -66,7 +79,7 @@ case class TraceTileParams(
 }
 
 /**
- * BOOM tile
+ * Trace tile
  *
  */
 class TraceTile private(
@@ -84,8 +97,16 @@ class TraceTile private(
     this(params, crossing.crossingType, lookup, p)
 
   val intOutwardNode = None
-  val masterNode = TLIdentityNode()
-  val slaveNode = TLIdentityNode()
+  lazy val masterNode = TLIdentityNode()
+  lazy val slaveNode = TLIdentityNode()
+
+  // val dcacheFifoNode = BundleBridgeSink[DecoupledIO[BoomDCacheReq]]()
+  // val icacheFifoNode = BundleBridgeSink[DecoupledIO[BoomDCacheReq]]()
+  // val dcacheFifoNode = BundleBridgeSource(() => Flipped(DecoupledIO(new BoomDCacheReq)))
+  val dcacheFifoNode = BundleBridgeSource(() => new TraceIO)
+  val icacheFifoNode = BundleBridgeSource(() => new TraceIO)
+
+  // type DCacheReqType = BoomDCacheReq
 
   val tile_master_blocker =
     tileParams.blockerCtrlAddr
@@ -94,7 +115,6 @@ class TraceTile private(
 
   tile_master_blocker.foreach(lm => connectTLSlave(lm.controlNode, xBytes))
 
-  // TODO: this doesn't block other masters, e.g. RoCCs
   tlOtherMastersNode := tile_master_blocker.map { _.node := tlMasterXbar.node } getOrElse { tlMasterXbar.node }
   masterNode :=* tlOtherMastersNode
 
@@ -123,17 +143,19 @@ class TraceTile private(
   // Frontend/ICache
   lazy val icache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(tileId))
   val iCacheTap = TLIdentityNode()
-  tlMasterXbar.node := iCacheTap := TLWidthWidget(tileParams.icache.get.rowBits/8) := visibilityNode := icache.node
+  tlMasterXbar.node := iCacheTap := TLWidthWidget(tileParams.dcache.get.rowBits/8) := visibilityNode := icache.node
 
 //   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, tileId))
 //   frontend.resetVectorSinkNode := resetVectorNexusNode
 //   tlMasterXbar.node := TLWidthWidget(tileParams.icache.get.rowBits/8) := frontend.masterNode
 
-  require(tileParams.dcache.get.rowBits == tileParams.icache.get.rowBits)
+  println(s"dcache params: ${tileParams.dcache}\n")
+  // println(s"dcache params: ${tileParams.icache}\n")
+  // require(tileParams.dcache.get.rowBits == tileParams.icache.get.rowBits)
 }
 
 /**
- * BOOM tile implementation
+ * Trace tile implementation
  *
  * @param outer top level BOOM tile
  */
@@ -145,49 +167,46 @@ class TraceTileModuleImp(outer: TraceTile) extends BaseTileModuleImp(outer){
   val lsu  = Module(new TraceLSU()(outer.p, outer.dcache.module.edge))
   val i_lsu = Module(new TraceLSU()(outer.p, outer.icache.module.edge))
 
+  // lsu.io.ptw := 0.U.asTypeOf(TLBPTWIO()(outer.p))
+  // lsu.io.core := 0.U.asTypeOf(LSUCoreIO()(outer.p))
+  // lsu.io.dmem := 0.U.asTypeOf(LSUDMemIO()(outer.p))
+
   //trace fifos
-  val dcache_fifo = Module(new TraceFifo(new BoomDCacheReq, 2))
-  val icache_fifo = Module(new TraceFifo(new BoomDCacheReq, 2))
+  val dcache_fifo = Module(new TraceFifo(new BoomDCacheReq, 1))
+  val icache_fifo = Module(new TraceFifo(new BoomDCacheReq, 1))
 
-  //val ptwPorts         = ListBuffer(lsu.io.ptw, outer.frontend.module.io.ptw, core.io.ptw_tlb)
+  // Connect the fifo output to their modules :)
+  dcache_fifo.io.deq <> lsu.io.fifo
+  icache_fifo.io.deq <> i_lsu.io.fifo
 
-  //val hellaCachePorts  = ListBuffer[HellaCacheIO]()
+  // Connect the formatted requests to the caches
+  outer.dcache.module.io.lsu <> lsu.io.dmem
+  outer.icache.module.io.lsu <> i_lsu.io.dmem
 
-//   outer.reportWFI(None) // TODO: actually report this?
+  // val dcacheFifoBundle = outer.dcacheFifoNode.bundle
+  // dontTouch(dcacheFifoBundle)
+  // val icacheFifoBundle = outer.icacheFifoNode.bundle
 
-//   outer.decodeCoreInterrupts(core.io.interrupts) // Decode the interrupt vector
+  // Connect to the FIFO inputs
+  dcache_fifo.io.enq <> outer.dcacheFifoNode.bundle.in
+  icache_fifo.io.enq <> outer.icacheFifoNode.bundle.in
+  dontTouch(dcache_fifo.io.enq)
 
-  // Pass through various external constants and reports
-//   outer.traceSourceNode.bundle <> core.io.trace
-//   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
-  //core.io.hartid := outer.hartIdSinkNode.bundle
-
-  // Connect the fifos to their modules :)
-  icache_fifo.io <> i_lsu.io.fifo
-  dcache_fifo.io <> lsu.io.fifo
-
-  // PTW
-//   val ptw  = Module(new PTW(ptwPorts.length)(outer.dcache.node.edges.out(0), outer.p))
-//   core.io.ptw <> ptw.io.dpath
-//   ptw.io.requestor <> ptwPorts.toSeq
-//   ptw.io.mem +=: hellaCachePorts
-
-   // LSU IO
-//   val hellaCacheArb = Module(new HellaCacheArbiter(hellaCachePorts.length)(outer.p))
-//   hellaCacheArb.io.requestor <> hellaCachePorts.toSeq
-//   lsu.io.hellacache <> hellaCacheArb.io.mem
-outer.dcache.module.io.lsu <> lsu.io.dmem
-outer.icache.module.io.lsu <> i_lsu.io.dmem
-
-  // Generate a descriptive string
-//   val frontendStr = outer.frontend.module.toString
-//   val coreStr = core.toString
-//   val boomTileStr =
-//     (BoomCoreStringPrefix(s"======TRACE Tile ${outer.tileId} Params======") + "\n"
-//     + frontendStr
-//     + coreStr + "\n")
-
-//   override def toString: String = boomTileStr
-
-//   print(boomTileStr)
+  outer.dcacheFifoNode.bundle.out <> lsu.io.ack
+  outer.icacheFifoNode.bundle.out <> i_lsu.io.ack
 }
+
+// object TraceTile{
+//   private implicit val localP = (new WithoutTLMonitors).alterMap(Map(
+//     TileKey -> TraceTileParams(),
+//     TileVisibilityNodeKey -> TLEphemeralNode()(ValName("tile_master")),
+//     LookupByHartId -> 0,
+//     XLen -> 64
+//   ))
+//   def makeDCacheFifoBundle()(implicit p: Parameters): DecoupledIO[BoomDCacheReq] =
+//     DecoupledIO(new BoomDCacheReq()(localP))
+//   def makeICacheFifoBundle()(implicit p: Parameters): DecoupledIO[BoomDCacheReq] =
+//     DecoupledIO(new BoomDCacheReq()(localP))
+// }
+
+

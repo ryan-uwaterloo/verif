@@ -38,6 +38,7 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
   var inFlight = false
   // Keep track of which txns have been forced (manually generated)
   var manTxn = ListBuffer[TLChannel]() ++ forceTxn
+  // println(s"manTxn: $manTxn")
   // Received transactions to be processed
   val tlProcess = ListBuffer[TLChannel]()
   // TLBundles to be pushed
@@ -190,7 +191,9 @@ class TLCFuzzer(params: TLBundleParameters, txnGen: Option[TLTransactionGenerato
 
     // If nothing queued, check if there is manually generated txns to push
     if (manTxn.nonEmpty && queuedTLBundles.isEmpty) {
+      // println(s"step manTxn: $manTxn")
       val complete = getNextCompleteTLTxn(manTxn.toSeq)
+      // println(s"complete: $complete")
       if (complete.isDefined) {
         queuedTLBundles ++= complete.get
         manTxn.remove(0, complete.get.size)

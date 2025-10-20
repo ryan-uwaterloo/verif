@@ -333,7 +333,7 @@ package object TLUtils {
       new TLBundleA(bundleParams).Lit(
       _.opcode -> opcode.U,
       _.param -> param.U,
-      _.size -> 3.U,
+      _.size -> 5.U,
       _.source -> source.U,
       _.address -> address.U,
       _.mask -> 255.U,
@@ -345,7 +345,7 @@ package object TLUtils {
       new TLBundleC(bundleParams).Lit(
         _.opcode -> opcode.U,
         _.param -> param.U,
-        _.size -> 3.U,
+        _.size -> 5.U,
         _.source -> source.U,
         _.address -> address.U,
         //_.mask -> 255.U,
