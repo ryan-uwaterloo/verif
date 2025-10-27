@@ -113,7 +113,9 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
         //print(txns.toString())
       }
 
-      for (_ <- 0 until 300){
+      for (_ <- 0 until 200){
+        val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -185,6 +187,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -224,6 +228,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -256,13 +262,15 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       for (i <- 0 until (tx_list.length * 10)) {
         val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
         L1Placeholder.push(txns)
-        for (j <- 0 until 5){ // incr. 5 clock cycles to queue more
+        for (j <- 0 until 10){ // incr. 5 clock cycles to queue more
           c.clock.step(1)
         }
 
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -290,8 +298,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       val txnFile = getClass.getResourceAsStream("/L2Formal_NestRelDiffCore.csv")
 
       val tx_list = TLUtils.CSVtoTL(txnFile, params)
-      val tx_list_1 = tx_list.slice(0, 9)
-      val tx_list_2 = tx_list.slice(9, 11)
+      val tx_list_1 = tx_list.slice(0, 7)
+      val tx_list_2 = tx_list.slice(8, 17)
       val fuzz_1 = new TLCFuzzer(params, None, tx_list_1, cacheBlockSize = 5, IdRange(0, 10))
       val fuzz_2 = new TLCFuzzer(params, None, tx_list_2, cacheBlockSize = 5, IdRange(0, 10))
 
@@ -304,18 +312,22 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz_1.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
-      for (i <- 0 until (tx_list_2.length * 10)) { //start these transactions partway through
+      for (i <- 0 until (tx_list_2.length * 20)) { //start these transactions partway through
         val txns = fuzz_2.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
         L1Placeholder.push(txns)
-        for (j <- 0 until 5){ // incr. 5 clock cycles to queue more
+        for (j <- 0 until 1){ // incr. 5 clock cycles to queue more
           c.clock.step(1)
         }
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz_2.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -355,6 +367,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -382,8 +396,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       val txnFile = getClass.getResourceAsStream("/L2Formal_SharedWay.csv")
 
       val tx_list = TLUtils.CSVtoTL(txnFile, params)
-      val tx_list_1 = tx_list.slice(0, 8)
-      val tx_list_2 = tx_list.slice(8, 13)
+      val tx_list_1 = tx_list.slice(0, 7)
+      val tx_list_2 = tx_list.slice(8, 21)
       val fuzz_1 = new TLCFuzzer(params, None, tx_list_1, cacheBlockSize = 5, IdRange(0, 10))
       val fuzz_2 = new TLCFuzzer(params, None, tx_list_2, cacheBlockSize = 5, IdRange(0, 10))
 
@@ -396,6 +410,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz_1.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -408,6 +424,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz_2.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
@@ -447,6 +465,8 @@ class TLL2CacheTest extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       for (i <- 0 until 200){ //just step the clock a bunch to run out pending txns
+        val txns = fuzz.next(FuzzMonitor.getMonitoredTransactions().map({_.data}))
+        L1Placeholder.push(txns)
         c.clock.step(1)
       }
 
