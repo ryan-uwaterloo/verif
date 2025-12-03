@@ -62,7 +62,7 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
   loadTrace()
 
   private def loadTrace(): Unit = {
-    println("hello world from trace reader!")
+    //println("hello world from trace reader!")
     val traceFile = new File(traceFileName)
     require(traceFile.exists(), s"Could not find trace file: ${traceFile.getAbsolutePath}")
     val stream = new FileInputStream(traceFile)
@@ -89,7 +89,7 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
       codedInput.popLimit(limit)
 
       if(recordCount == 0){ //get initial icache packets from each core
-        println(record)
+        //println(record)
       }
 
       addFromRecord(record)
@@ -145,7 +145,7 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
     if (nodeStatus(seq) == NotReady && dependencies(seq).forall(completed.contains)) {
       val delay = node.compDelay max 1
       nodeStatus(seq) = Executing(delay)
-      println(s"[Cycle $clock] Executing node $seq")
+      //println(s"[Cycle $clock] Executing node $seq")
     }
   }
 
@@ -156,20 +156,20 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
         case COMP =>
           nodeStatus(seq) = Completed
           completed += seq
-          println(s"[Cycle $clock] COMP $seq done")
+          //println(s"[Cycle $clock] COMP $seq done")
 
         case LOAD =>
           pendingReqs += (seq -> node)
-          nodeStatus(seq) = WaitingForAck
-          println(s"[Cycle $clock] Issuing LOAD $seq")
+          nodeStatus(seq) = WaitingForIssue
+          //println(s"[Cycle $clock] Issuing LOAD $seq")
 
         case STORE =>
           pendingReqs += (seq -> node)
-          nodeStatus(seq) = WaitingForAck
-          println(s"[Cycle $clock] Issuing STORE $seq")
+          nodeStatus(seq) = WaitingForIssue
+          //println(s"[Cycle $clock] Issuing STORE $seq")
       }
     } else {
-      nodeStatus(seq) = Executing(remaining - 100)
+      nodeStatus(seq) = Executing(remaining - 1000)
     }
   }
 
@@ -182,35 +182,39 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
 
   def issueLoad(seqNum: Long): Unit = {
     if (pendingReqs.contains(seqNum)) {
-      println(s"[Cycle $clock] LOAD issued: $seqNum")
+      //println(s"[Cycle $clock] LOAD issued: $seqNum")
       issuedLoads += (seqNum -> pendingReqs(seqNum))
       pendingReqs -= seqNum 
+      nodeStatus(seqNum) = WaitingForAck
     }
   }
 
   def issueStore(seqNum: Long): Unit = {
     if (pendingReqs.contains(seqNum)) {
-      println(s"[Cycle $clock] STORE issued: $seqNum")
+      //println(s"[Cycle $clock] STORE issued: $seqNum")
       issuedStores += (seqNum -> pendingReqs(seqNum))
       pendingReqs -= seqNum
+      nodeStatus(seqNum) = WaitingForAck
     }
   }
 
   def acknowledgeLoad(seqNum: Long): Unit = {
     if (issuedLoads.contains(seqNum)) {
-      println(s"[Cycle $clock] LOAD $seqNum acked after ${memReqTimes(seqNum)} Cycles")
-      // println(seqNum)
+      //println(s"[Cycle $clock] LOAD $seqNum acked after ${memReqTimes(seqNum)} Cycles")
+      // //println(seqNum)
       issuedLoads -= seqNum 
       completed += seqNum
+      nodeStatus(seqNum) = Completed
     }
   }
 
   def acknowledgeStore(seqNum: Long): Unit = {
     if (issuedStores.contains(seqNum)) {
-      println(s"[Cycle $clock] STORE $seqNum acked after ${memReqTimes(seqNum)} Cycles")
-      // println(seqNum)
+      //println(s"[Cycle $clock] STORE $seqNum acked after ${memReqTimes(seqNum)} Cycles")
+      // //println(seqNum)
       issuedStores -= seqNum
       completed += seqNum
+      nodeStatus(seqNum) = Completed
     }
   }
 
@@ -242,6 +246,11 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
               println(nodes(dep))
             }
           }
+      }
+    }
+    for ((seq, node) <- nodes) {
+      if (nodeStatus(seq) != Completed){
+        println(s"NODE: ${seq}, STATUS: ${nodeStatus(seq)}")
       }
     }
   }
@@ -299,7 +308,7 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
       val limit = codedInput.pushLimit(msgSize)
       val record = Packet.parseFrom(codedInput)
       if(recordCount == 0){ //get initial icache packets from each core
-        println(record)
+        //println(record)
       }
       codedInput.popLimit(limit)
 
@@ -336,10 +345,10 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
 
   // 1. Mark nodes as Ready if all deps done
   for ((seq, node) <- nodes) {
-    if (nodeStatus(seq) == NotReady && clock*100 >= seq) { //since tick == seq
+    if (nodeStatus(seq) == NotReady && clock*1000 >= seq) { //since tick == seq
       pendingReqs += (seq -> node)
       nodeStatus(seq) = WaitingForAck
-      println(s"[Cycle $clock] Executing node $seq")
+      //println(s"[Cycle $clock] Executing node $seq")
     }
   }
 
@@ -352,7 +361,7 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
 
   def issueLoad(seqNum: Long): Unit = {
     if (pendingReqs.contains(seqNum)) {
-      println(s"[Cycle $clock] I-LOAD issued: $seqNum")
+      //println(s"[Cycle $clock] I-LOAD issued: $seqNum")
       issuedLoads += (seqNum -> pendingReqs(seqNum))
       pendingReqs -= seqNum 
       memReqTimes(seqNum) = MemReqTime(seqNum, "Load", 1L)
@@ -361,7 +370,7 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
 
   def acknowledgeLoad(seqNum: Long): Unit = {
     if (issuedLoads.contains(seqNum)) {
-      println(s"[Cycle $clock] I-LOAD $seqNum acked after ${memReqTimes(seqNum)} Cycles")
+      //println(s"[Cycle $clock] I-LOAD $seqNum acked after ${memReqTimes(seqNum)} Cycles")
       // println(seqNum)
       issuedLoads -= seqNum 
       completed += seqNum

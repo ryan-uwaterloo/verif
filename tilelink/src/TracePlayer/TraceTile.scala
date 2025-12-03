@@ -59,7 +59,7 @@ class TraceIO(implicit p: Parameters) extends Bundle{
 case class TraceTileParams(
   core: BoomCoreParams = BoomCoreParams(),
   icache: Option[ICacheParams] = Some(ICacheParams(blockBytes = 32)),
-  dcache: Option[DCacheParams] = Some(DCacheParams(blockBytes = 32)),
+  dcache: Option[DCacheParams] = Some(DCacheParams(rowBits = 256, nSets = 4, nMSHRs = 4)),
   btb: Option[BTBParams] = Some(BTBParams()),
   name: Option[String] = Some("trace_tile"),
   tileId: Int = 0

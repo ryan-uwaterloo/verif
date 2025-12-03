@@ -7,6 +7,7 @@ import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.Str
+import freechips.rocketchip.util.MuxT
 
 import boom.common._
 import boom.exu.{BrUpdateInfo, Exception, FuncUnitResp, CommitSignals, ExeUnitResp}
@@ -127,52 +128,102 @@ class TraceLSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     io.dmem.s1_kill(w) := false.B
   }
-    val dmem_resp_fired = WireInit(widthMap(w => false.B))
 
-    //crush this state machine into a fifo
+  val dmem_resp_fired = WireInit(widthMap(w => false.B))
 
-    //this is the bits we need to pass in
-    dmem_req(0).valid := io.fifo.valid & ~io.dmem.resp.map(_.valid).reduce(_||_) & ~dmem_resp_fired_reg(0)
-    dontTouch(dmem_req(0).valid)
-    dmem_req(0).bits.uop := io.fifo.bits.uop
-    dmem_req(0).bits.addr := io.fifo.bits.addr
-    dmem_req(0).bits.data := io.fifo.bits.data
+  //crush this state machine into a fifo
+  val wait_nack_ctr = RegInit(1.U(1.W)) // have to re-issue a req if it gets nack'd (yes this will stall and idgaf)
+  val issued_this_req = RegInit(false.B)
+
+  //this is the bits we need to pass in
+  dmem_req(0).valid := io.fifo.valid & ~io.dmem.resp.map(_.valid).reduce(_||_) & ~dmem_resp_fired_reg(0) && wait_nack_ctr === 0.U && !issued_this_req
+  dontTouch(dmem_req(0).valid)
+  dmem_req(0).bits.uop := io.fifo.bits.uop
+  dmem_req(0).bits.addr := io.fifo.bits.addr
+  dmem_req(0).bits.data := io.fifo.bits.data
+
+  when(io.dmem.req.fire){ //when we issue a req, note that
+    issued_this_req := true.B
+  }
+  when(io.fifo.fire || io.dmem.nack(0).valid){ //when it nacks or we get a new req, reset
+    issued_this_req := false.B
+  }
+
+  val nmshrs = 4
+
+  val last_req_idx = RegInit(0.U(log2Ceil(nmshrs).W))
+  val last_req_l_n_s = RegInit(false.B)
+
+  //address storage for multiple reqs
+  val ldq_ptr = Wire(UInt(log2Ceil(nmshrs).W))
+  val stq_ptr = Wire(UInt(log2Ceil(nmshrs).W))
+
+  dmem_req(0).bits.uop.ldq_idx := ldq_ptr
+  dmem_req(0).bits.uop.stq_idx := stq_ptr
+
+  val ldq_addr_array = RegInit(VecInit(Seq.fill(nmshrs)(0.U(coreMaxAddrBits.W))))
+  val ldq_valid_array = RegInit(VecInit(Seq.fill(nmshrs)(false.B)))
+
+  val stq_addr_array = RegInit(VecInit(Seq.fill(nmshrs)(0.U(coreMaxAddrBits.W))))
+  val stq_valid_array = RegInit(VecInit(Seq.fill(nmshrs)(false.B)))
+
+  ldq_ptr := ldq_valid_array.zipWithIndex.map{case (data, idx) => 
+    (data, idx.U)}.reduce { (a, b) => MuxT((~a._1), a, b)}._2
+
+  stq_ptr := stq_valid_array.zipWithIndex.map{case (data, idx) => 
+    (data, idx.U)}.reduce { (a, b) => MuxT((~a._1), a, b)}._2
     
   // Handle Memory Responses and nacks
   //----------------------------------
-  io.fifo.ready := (~dmem_resp_fired(0) && dmem_resp_fired_reg(0)) || ~io.fifo.valid //when we complete a txn, load next txn... right? also step though fifo when there is not a valid txn at head :)
-  // issue next transaction after ack stops being asserted to deal with long acks
+  val reqs_in_flight = RegInit(0.U(log2Ceil(nmshrs+1).W))
+
+  // io.fifo.ready := (~dmem_resp_fired(0) && dmem_resp_fired_reg(0)) || ~io.fifo.valid || reqs_in_flight =/= (nmshrs-1).U //when we complete a txn, load next txn... up to num MSHRs right? also step though fifo when there is not a valid txn at head :)
+  io.fifo.ready := (~io.fifo.valid || reqs_in_flight =/= nmshrs.U) && io.dmem.req.ready && wait_nack_ctr === 0.U && ~io.dmem.nack(0).valid && issued_this_req //when we complete a txn, load next txn... up to num MSHRs right? also step though fifo when there is not a valid txn at head :)
+  // io.fifo.ready := io.dmem.req.ready //adjust this to allow multiple inflight reqs at once
+  when(io.dmem.req.fire && !(~dmem_resp_fired(0) && dmem_resp_fired_reg(0))) { //when we issue a request without getting one back...
+    assert(reqs_in_flight =/= nmshrs.U)
+    reqs_in_flight := reqs_in_flight + 1.U
+  }.elsewhen((~dmem_resp_fired(0) && dmem_resp_fired_reg(0)) || io.dmem.nack(0).valid) { //if we get a req back without issuing one
+    assert(reqs_in_flight =/= 0.U) //assert no overflow plz
+    reqs_in_flight := reqs_in_flight - 1.U
+  }
+
+  when(io.dmem.nack(0).valid){ //clear pending req on nack
+    when(last_req_l_n_s){
+      ldq_valid_array(last_req_idx) := false.B      
+    }.otherwise{
+      stq_valid_array(last_req_idx) := false.B
+    }
+  }
+
+  when(io.dmem.req.fire){
+    wait_nack_ctr := 1.U
+    when(dmem_req(0).bits.uop.uses_ldq){
+      last_req_idx := ldq_ptr
+      last_req_l_n_s := true.B
+      ldq_valid_array(ldq_ptr) := true.B
+      ldq_addr_array(ldq_ptr) := io.fifo.bits.addr
+    }.elsewhen(dmem_req(0).bits.uop.uses_stq){
+      last_req_idx := stq_ptr
+      last_req_l_n_s := false.B
+      stq_valid_array(stq_ptr) := true.B
+      stq_addr_array(stq_ptr) := io.fifo.bits.addr
+    }
+    assert(!(io.fifo.bits.uop.uses_ldq && io.fifo.bits.uop.uses_stq))
+  }.elsewhen(wait_nack_ctr > 0.U){
+    wait_nack_ctr := wait_nack_ctr - 1.U
+  }
 
   for (w <- 0 until memWidth) {
-    // Handle nacks, or can we just hold it valid..? let's ignore everything because I'm lazy lol
-    // when (io.dmem.nack(w).valid)
-    // {
-    //   // We have to re-execute this!
-    //   when (io.dmem.nack(w).bits.is_hella)//what is this nack valid :skull:
-    //   {
-    //     assert(hella_state === h_wait || hella_state === h_dead)
-    //   }
-    //     .elsewhen (io.dmem.nack(w).bits.uop.uses_ldq)
-    //   {
-    //     assert(ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed)
-    //     ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed  := false.B
-    //     nacking_loads(io.dmem.nack(w).bits.uop.ldq_idx) := true.B
-    //   }
-    //     .otherwise
-    //   {
-    //     assert(io.dmem.nack(w).bits.uop.uses_stq)
-    //     when (IsOlder(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head, stq_head)) {
-    //       stq_execute_head := io.dmem.nack(w).bits.uop.stq_idx
-    //     }
-    //   }
-    // }
     // Handle the response... I think this is sufficient.
     when (io.dmem.resp(w).valid)
     {
       io.ack.valid := true.B
-      io.ack.bits.addr := io.fifo.bits.addr
       when (io.dmem.resp(w).bits.uop.uses_ldq)
       {
+        io.ack.bits.addr := ldq_addr_array(io.dmem.resp(w).bits.uop.ldq_idx) //we need an actual way to get the resp'd address T_T
+        ldq_valid_array(io.dmem.resp(w).bits.uop.ldq_idx) := false.B
+        assert(ldq_valid_array(io.dmem.resp(w).bits.uop.ldq_idx) === true.B || dmem_resp_fired(w))
         io.ack.bits.load_n_store := true.B
         assert(!io.dmem.resp(w).bits.is_hella)
         dmem_resp_fired(w) := true.B
@@ -180,6 +231,9 @@ class TraceLSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
         .elsewhen (io.dmem.resp(w).bits.uop.uses_stq)
       {
+        io.ack.bits.addr := stq_addr_array(io.dmem.resp(w).bits.uop.stq_idx) //we need an actual way to get the resp'd address T_T
+        stq_valid_array(io.dmem.resp(w).bits.uop.stq_idx) := false.B
+        assert(stq_valid_array(io.dmem.resp(w).bits.uop.stq_idx) === true.B || dmem_resp_fired(w))
         io.ack.bits.load_n_store := false.B
         assert(!io.dmem.resp(w).bits.is_hella)
         dmem_resp_fired(w) := true.B

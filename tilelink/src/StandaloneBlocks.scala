@@ -10,11 +10,13 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.subsystem.RocketCrossingParams
 import freechips.rocketchip.tilelink.TLRegisterNode
-import parrp_chisel.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
+// import parrp_chisel.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
+import sifive.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
 import boom.lsu._
 import verif.etrace._
 import freechips.rocketchip.tile._
 import boom.common._
+import freechips.rocketchip.rocket.{DCacheParams}
 
 
 object DefaultTLParams {
@@ -386,7 +388,8 @@ class MulticoreTraceTileHarness(
   val L2ways:         Int = 8,
   val L2sets:         Int = 4,
   val L2blockBytes:   Int = 64,
-  val L2beatBytes:    Int = 8
+  val L2beatBytes:    Int = 8,
+  val nL1MSHRs:       Int = 4
 )(implicit p: Parameters = new WithoutTLMonitors) extends LazyModule with BindingScope {
 
   // Shared memory hierarchy
@@ -456,7 +459,7 @@ class MulticoreTraceTileHarness(
 
   // Instantiate cores and connect to Xbar
   val tiles: Seq[TraceTile] = Seq.tabulate(numTiles) { id =>
-    val tile = LazyModule(new TraceTile(TraceTileParams(tileId = id), RocketCrossingParams(), NoHartLookup) with CanAccessInterrupts)
+    val tile = LazyModule(new TraceTile(TraceTileParams(tileId = id, dcache = Some(DCacheParams(rowBits = 256, nSets = L2sets, nMSHRs = nL1MSHRs))), RocketCrossingParams(), NoHartLookup) with CanAccessInterrupts)
     tlxbar.node := TLWidthWidget(L2beatBytes) := tile.masterNode
     tile.interruptNode := intXbar.intnode
     tile.hartIdNode := hartIdSource(id)
