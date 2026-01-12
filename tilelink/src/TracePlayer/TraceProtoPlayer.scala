@@ -24,8 +24,6 @@ case object WaitingForIssue extends NodeStatus            // When a L/S is issue
 case object WaitingForAck extends NodeStatus              // When a Load/Store is acked by the cache as complete
 case object Completed extends NodeStatus
 
-
-
 case class TraceNode(
   seqNum: Long,
   nodeType: NodeType,
@@ -44,7 +42,9 @@ case class MemReqTime(
   reqTime: Long
 )
 
-class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
+case class WatchDogTimeoutError() extends Exception() {}
+
+class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
   private val nodes = mutable.Map[Long, TraceNode]()
   private val dependencies = mutable.Map[Long, Set[Long]]()
   private val completed = mutable.Set[Long]()
@@ -59,20 +59,28 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
   var clock = 0L
   var header: InstDepRecordHeader = _
 
-  loadTrace()
+  private var stream: FileInputStream = _
+  private var gzipStream: GZIPInputStream = _
+  private var codedInput: CodedInputStream = _
+  private var eof: Boolean = false
 
-  private def loadTrace(): Unit = {
-    //println("hello world from trace reader!")
+  private val LOW_WATER = 10    // when to load more
+  private val BATCH_LOAD = 200   // how many to load per request
+  private val MAX_NODES_IN_MEMORY = 1000
+  private val WATCH_DOG_TIMEOUT = 10000 //max number of cycles a request could take?
+
+  openStream()
+  ensureEnoughReadyNodes()
+
+  private def openStream(): Unit = {
     val traceFile = new File(traceFileName)
     require(traceFile.exists(), s"Could not find trace file: ${traceFile.getAbsolutePath}")
-    val stream = new FileInputStream(traceFile)
-    // val stream = getClass.getResourceAsStream(traceFile)
-    require(stream != null, s"Could not find trace file: $traceFile")
 
-    val gzipStream = new GZIPInputStream(stream)
-    val codedInput = CodedInputStream.newInstance(gzipStream)
+    stream = new FileInputStream(traceFile)
+    gzipStream = new GZIPInputStream(stream)
+    codedInput = CodedInputStream.newInstance(gzipStream)
 
-    codedInput.readRawLittleEndian32() // Skip magic
+    codedInput.readRawLittleEndian32() // magic
 
     val headerSize = codedInput.readRawVarint32()
     val headerLimit = codedInput.pushLimit(headerSize)
@@ -80,31 +88,123 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
     codedInput.popLimit(headerLimit)
 
     println(s"[Header] tickFreq=${header.getTickFreq}  windowSize=${header.getWindowSize}")
-
-    var recordCount = 0
-    while (!codedInput.isAtEnd && recordCount < numTraces) {
-      val msgSize = codedInput.readRawVarint32()
-      val limit = codedInput.pushLimit(msgSize)
-      val record = InstDepRecord.parseFrom(codedInput)
-      codedInput.popLimit(limit)
-
-      if(recordCount == 0){ //get initial icache packets from each core
-        //println(record)
-      }
-
-      addFromRecord(record)
-      recordCount += 1
-    }
-
-    println(s"[Load] Parsed $recordCount data records")
-    gzipStream.close()
-
-    // After parsing all nodes
-    nodes.keys.foreach { seq =>
-      nodeStatus(seq) = NotReady
-    }
-
   }
+
+  private def loadNextBatch(max: Int = 2000): Int = {
+    if (eof) return 0
+
+    var count = 0
+    try {
+      while (count < max) {
+        val msgSize = codedInput.readRawVarint32()   // may EOF here
+        val limit = codedInput.pushLimit(msgSize)
+        val record = InstDepRecord.parseFrom(codedInput)
+        codedInput.popLimit(limit)
+
+        addFromRecord(record)
+        nodeStatus(record.getSeqNum) = NotReady
+        count += 1
+      }
+    } catch {
+      case _: java.io.EOFException |
+          _: com.google.protobuf.InvalidProtocolBufferException =>
+        eof = true
+        println(s"[Stream] EOF after adding $count records.")
+    }
+
+    count
+  }
+
+  private def ensureEnoughReadyNodes(): Unit = {
+    val readyCount = nodeStatus.count(_._2 == NotReady)
+    if (!eof && readyCount < LOW_WATER) {
+      val loaded = loadNextBatch(BATCH_LOAD)
+      if (loaded > 0)
+        println(s"[Stream] Loaded $loaded additional DATA trace nodes")
+    }
+  }
+
+  private def pruneCompleted(): Unit = {
+    if (nodes.size <= MAX_NODES_IN_MEMORY) return
+
+    val excess = nodes.size - MAX_NODES_IN_MEMORY
+
+    // prune in FIFO order of seqNum
+    val sortedCompleted =
+      completed.toSeq.sorted.take(excess)
+
+    for (seq <- sortedCompleted) {
+      nodes.remove(seq)
+      dependencies.remove(seq)
+      nodeStatus.remove(seq)
+      completed.remove(seq)
+      memReqTimes.remove(seq)
+    }
+
+    println(s"[Stream] Pruned $excess completed DATA nodes (kept newest ${MAX_NODES_IN_MEMORY})")
+  }
+
+  // private def loadTrace(): Unit = {
+  //   //println("hello world from trace reader!")
+  //   val traceFile = new File(traceFileName)
+  //   require(traceFile.exists(), s"Could not find trace file: ${traceFile.getAbsolutePath}")
+  //   val stream = new FileInputStream(traceFile)
+  //   // val stream = getClass.getResourceAsStream(traceFile)
+  //   require(stream != null, s"Could not find trace file: $traceFile")
+
+  //   val gzipStream = new GZIPInputStream(stream)
+  //   val codedInput = CodedInputStream.newInstance(gzipStream)
+
+  //   codedInput.readRawLittleEndian32() // Skip magic
+
+  //   val headerSize = codedInput.readRawVarint32()
+  //   val headerLimit = codedInput.pushLimit(headerSize)
+  //   header = InstDepRecordHeader.parseFrom(codedInput)
+  //   codedInput.popLimit(headerLimit)
+
+  //   println(s"[Header] tickFreq=${header.getTickFreq}  windowSize=${header.getWindowSize}")
+
+  //   var recordCount = 0
+  //   val unlimited = (numTraces == 0)
+
+  //   try {
+  //     while (unlimited || recordCount < numTraces) {
+  //       val msgSize =
+  //         try {
+  //           codedInput.readRawVarint32()
+  //         } catch {
+  //           case _: java.io.EOFException =>
+  //             // normal end of gzip-file
+  //             println(s"[Load] EOF reached after $recordCount records")
+  //             return
+  //         }
+
+  //       val limit = codedInput.pushLimit(msgSize)
+  //       val record =
+  //         try {
+  //           InstDepRecord.parseFrom(codedInput)
+  //         } catch {
+  //           case _: com.google.protobuf.InvalidProtocolBufferException =>
+  //             // This also means EOF or truncated msg
+  //             println(s"[Load] Stopping: Invalid or truncated protobuf after $recordCount records")
+  //             return
+  //         }
+
+  //       codedInput.popLimit(limit)
+
+  //       addFromRecord(record)
+  //       recordCount += 1
+  //     }
+  //   } finally {
+  //     gzipStream.close()
+  //   }
+
+  //   // After parsing all nodes
+  //   nodes.keys.foreach { seq =>
+  //     nodeStatus(seq) = NotReady
+  //   }
+
+  // }
 
   private def addFromRecord(record: InstDepRecord): Unit = {
     val nodeType = record.getType match {
@@ -138,42 +238,44 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
   }
 
   def step(): Unit = {
-  clock += 1
+    ensureEnoughReadyNodes()
+    clock += 1
 
-  // 1. Mark nodes as Ready if all deps done
-  for ((seq, node) <- nodes) {
-    if (nodeStatus(seq) == NotReady && dependencies(seq).forall(completed.contains)) {
-      val delay = node.compDelay max 1
-      nodeStatus(seq) = Executing(delay)
-      //println(s"[Cycle $clock] Executing node $seq")
-    }
-  }
-
-  for ((seq, Executing(remaining)) <- nodeStatus.toList) {
-    if (remaining <= 1) {
-      val node = nodes(seq)
-      node.nodeType match {
-        case COMP =>
-          nodeStatus(seq) = Completed
-          completed += seq
-          //println(s"[Cycle $clock] COMP $seq done")
-
-        case LOAD =>
-          pendingReqs += (seq -> node)
-          nodeStatus(seq) = WaitingForIssue
-          //println(s"[Cycle $clock] Issuing LOAD $seq")
-
-        case STORE =>
-          pendingReqs += (seq -> node)
-          nodeStatus(seq) = WaitingForIssue
-          //println(s"[Cycle $clock] Issuing STORE $seq")
+    // 1. Mark nodes as Ready if all deps done
+    for ((seq, node) <- nodes) {
+      if (nodeStatus(seq) == NotReady && dependencies(seq).forall(completed.contains)) {
+        val delay = node.compDelay max 1
+        nodeStatus(seq) = Executing(delay)
+        //println(s"[Cycle $clock] Executing node $seq")
       }
-    } else {
-      nodeStatus(seq) = Executing(remaining - 1000)
     }
-  }
+
+    for ((seq, Executing(remaining)) <- nodeStatus.toList) {
+      if (remaining <= 1) {
+        val node = nodes(seq)
+        node.nodeType match {
+          case COMP =>
+            nodeStatus(seq) = Completed
+            completed += seq
+            //println(s"[Cycle $clock] COMP $seq done")
+
+          case LOAD =>
+            pendingReqs += (seq -> node)
+            nodeStatus(seq) = WaitingForIssue
+            //println(s"[Cycle $clock] Issuing LOAD $seq")
+
+          case STORE =>
+            pendingReqs += (seq -> node)
+            nodeStatus(seq) = WaitingForIssue
+            //println(s"[Cycle $clock] Issuing STORE $seq")
+        }
+      } else {
+        nodeStatus(seq) = Executing(remaining - 1000)
+      }
+    }
 
   // LOAD/STORE completion deferred to ack()
+  pruneCompleted()
 }
   def getPendingReq: Option[TraceNode] = pendingReqs.headOption.map(_._2)
 
@@ -221,6 +323,11 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
   def incrementLoadTime(seqNum: Long): Unit = {
     if (memReqTimes.contains(seqNum)){
       memReqTimes(seqNum)= MemReqTime(seqNum, "Load", memReqTimes(seqNum).reqTime + 1)
+      if (memReqTimes(seqNum).reqTime >=  WATCH_DOG_TIMEOUT) {
+        println(s"Node timed out: ${memReqTimes(seqNum)}")
+        debug()
+        throw new WatchDogTimeoutError()
+      }
     }else{
       memReqTimes(seqNum) = MemReqTime(seqNum, "Load", 1L)
     }
@@ -229,12 +336,17 @@ class ElasticTraceDAG(traceFileName: String, numTraces: Int) {
   def incrementStoreTime(seqNum: Long): Unit = {
     if (memReqTimes.contains(seqNum)){
       memReqTimes(seqNum)= MemReqTime(seqNum, "Store", memReqTimes(seqNum).reqTime + 1)
+      if (memReqTimes(seqNum).reqTime >=  WATCH_DOG_TIMEOUT) {
+        println(s"Node timed out: ${memReqTimes(seqNum)}")
+        debug()
+        throw new WatchDogTimeoutError()
+      }
     }else{
       memReqTimes(seqNum) = MemReqTime(seqNum, "Store", 1L)
     }
   }
 
-  def isDone: Boolean = completed.size == nodes.size
+  def isDone: Boolean = (completed.size == nodes.size) && eof
 
   def debug(): Unit ={
     for ((seq, node) <- nodes) {
@@ -270,7 +382,7 @@ case class InstNode(
   pc: Option[Long]
 )
 
-class InstTraceDAG(traceFileName: String, numTraces: Int) {
+class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
   private val nodes = mutable.Map[Long, InstNode]()
   private val completed = mutable.Set[Long]()
   private val nodeStatus = mutable.Map[Long, NodeStatus]()
@@ -281,50 +393,156 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
   var clock = 0L
   var header: PacketHeader = _
 
-  loadTrace()
+  private var stream: FileInputStream = _
+  private var gzipStream: GZIPInputStream = _
+  private var codedInput: CodedInputStream = _
+  private var eof: Boolean = false
 
-  private def loadTrace(): Unit = {
-    // println("hello world from i-trace reader!")
+  private val LOW_WATER = 10    // when to load more
+  private val BATCH_LOAD = 20   // how many to load per request
+  private val MAX_NODES_IN_MEMORY = 100 //no deps, store way less (but still something for my sanity)
+  private val WATCH_DOG_TIMEOUT = 10000
+
+  openStream()
+  ensureEnoughReadyNodes()
+
+  private def openStream(): Unit = {
     val traceFile = new File(traceFileName)
     require(traceFile.exists(), s"Could not find trace file: ${traceFile.getAbsolutePath}")
-    val stream = new FileInputStream(traceFile)
-    require(stream != null, s"Could not find trace file: $traceFile")
 
-    val gzipStream = new GZIPInputStream(stream)
-    val codedInput = CodedInputStream.newInstance(gzipStream)
+    stream = new FileInputStream(traceFile)
+    gzipStream = new GZIPInputStream(stream)
+    codedInput = CodedInputStream.newInstance(gzipStream)
 
-    codedInput.readRawLittleEndian32() // Skip magic
+    codedInput.readRawLittleEndian32() // magic
 
     val headerSize = codedInput.readRawVarint32()
     val headerLimit = codedInput.pushLimit(headerSize)
     header = PacketHeader.parseFrom(codedInput)
     codedInput.popLimit(headerLimit)
 
-    println(s"[I-Header] tickFreq=${header.getTickFreq}")
-
-    var recordCount = 0
-    while (!codedInput.isAtEnd && recordCount < numTraces) {
-      val msgSize = codedInput.readRawVarint32()
-      val limit = codedInput.pushLimit(msgSize)
-      val record = Packet.parseFrom(codedInput)
-      if(recordCount == 0){ //get initial icache packets from each core
-        //println(record)
-      }
-      codedInput.popLimit(limit)
-
-      addFromRecord(record)
-      recordCount += 1
-    }
-
-    println(s"[Load] Parsed $recordCount records")
-    gzipStream.close()
-
-    // After parsing all nodes
-    nodes.keys.foreach { seq =>
-      nodeStatus(seq) = NotReady
-    }
-
+    println(s"[Header] i-trace tickFreq=${header.getTickFreq}")
   }
+
+  private def loadNextBatch(max: Int = 2000): Int = {
+    if (eof) return 0
+
+    var count = 0
+    try {
+      while (count < max) {
+        val msgSize = codedInput.readRawVarint32()   // may EOF here
+        val limit = codedInput.pushLimit(msgSize)
+        val record = Packet.parseFrom(codedInput)
+        codedInput.popLimit(limit)
+
+        addFromRecord(record)
+        nodeStatus(record.getTick) = NotReady
+        count += 1
+      }
+    } catch {
+      case _: java.io.EOFException |
+          _: com.google.protobuf.InvalidProtocolBufferException =>
+        eof = true
+        println(s"[Stream] EOF after adding $count records.")
+    }
+
+    count
+  }
+
+  private def ensureEnoughReadyNodes(): Unit = {
+    val readyCount = nodeStatus.count(_._2 == NotReady) + nodeStatus.count(_._2 == WaitingForIssue)
+    if (!eof && readyCount < LOW_WATER) {
+      val loaded = loadNextBatch(BATCH_LOAD)
+      if (loaded > 0)
+        println(s"[Stream] Loaded $loaded additional INST trace nodes")
+    }
+  }
+
+  private def pruneCompleted(): Unit = {
+    if (nodes.size <= MAX_NODES_IN_MEMORY) return
+
+    val excess = nodes.size - MAX_NODES_IN_MEMORY
+
+    // prune in FIFO order of seqNum
+    val sortedCompleted =
+      completed.toSeq.sorted.take(excess)
+
+    if (sortedCompleted.size == 0) {
+      println(s"[WARN] [Stream] No completed nodes with max in memory!!")
+      debug()
+    }
+
+    for (seq <- sortedCompleted) {
+      nodes.remove(seq)
+      nodeStatus.remove(seq)
+      completed.remove(seq)
+      memReqTimes.remove(seq)
+    }
+
+    println(s"[Stream] Pruned $excess completed INST nodes (kept newest ${MAX_NODES_IN_MEMORY})")
+  }
+
+  // private def loadTrace(): Unit = {
+  //   // println("hello world from i-trace reader!")
+  //   val traceFile = new File(traceFileName)
+  //   require(traceFile.exists(), s"Could not find trace file: ${traceFile.getAbsolutePath}")
+  //   val stream = new FileInputStream(traceFile)
+  //   require(stream != null, s"Could not find trace file: $traceFile")
+
+  //   val gzipStream = new GZIPInputStream(stream)
+  //   val codedInput = CodedInputStream.newInstance(gzipStream)
+
+  //   codedInput.readRawLittleEndian32() // Skip magic
+
+  //   val headerSize = codedInput.readRawVarint32()
+  //   val headerLimit = codedInput.pushLimit(headerSize)
+  //   header = PacketHeader.parseFrom(codedInput)
+  //   codedInput.popLimit(headerLimit)
+
+  //   println(s"[I-Header] tickFreq=${header.getTickFreq}")
+
+  //   var recordCount = 0
+  //   val unlimited = (numTraces == 0)
+
+  //   try {
+  //     while (unlimited || recordCount < numTraces) {
+  //       val msgSize =
+  //         try {
+  //           codedInput.readRawVarint32()
+  //         } catch {
+  //           case _: java.io.EOFException =>
+  //             // normal end of gzip-file
+  //             println(s"[Load] EOF reached after $recordCount records")
+  //             return
+  //         }
+
+  //       val limit = codedInput.pushLimit(msgSize)
+  //       val record =
+  //         try {
+  //           Packet.parseFrom(codedInput)
+  //         } catch {
+  //           case _: com.google.protobuf.InvalidProtocolBufferException =>
+  //             // This also means EOF or truncated msg
+  //             println(s"[Load] Stopping: Invalid or truncated protobuf after $recordCount records")
+  //             return
+  //         }
+
+  //       codedInput.popLimit(limit)
+
+  //       addFromRecord(record)
+  //       recordCount += 1
+  //     }
+  //   } finally {
+  //     println(s"[Load] Parsed $recordCount records")
+  //     gzipStream.close()
+  //   }
+
+  //   // After parsing all nodes
+  //   nodes.keys.foreach { seq =>
+  //     nodeStatus(seq) = NotReady
+  //   }
+
+  // }
 
   private def addFromRecord(record: Packet): Unit = {
     val node = InstNode(
@@ -341,18 +559,20 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
   }
 
   def step(): Unit = {
-  clock += 1
+    ensureEnoughReadyNodes()
+    clock += 1
 
-  // 1. Mark nodes as Ready if all deps done
-  for ((seq, node) <- nodes) {
-    if (nodeStatus(seq) == NotReady && clock*1000 >= seq) { //since tick == seq
-      pendingReqs += (seq -> node)
-      nodeStatus(seq) = WaitingForAck
-      //println(s"[Cycle $clock] Executing node $seq")
+    // 1. Mark nodes as Ready if all deps done
+    for ((seq, node) <- nodes) {
+      if (nodeStatus(seq) == NotReady && clock*1000 >= seq) { //since tick == seq
+        pendingReqs += (seq -> node)
+        nodeStatus(seq) = WaitingForIssue
+        //println(s"[Cycle $clock] Executing node $seq")
+      }
     }
-  }
 
-  // LOAD/STORE completion deferred to ack()
+    // LOAD/STORE completion deferred to ack()
+    pruneCompleted()
   }
 
   def getPendingReq: Option[InstNode] = pendingReqs.headOption.map(_._2)
@@ -364,31 +584,51 @@ class InstTraceDAG(traceFileName: String, numTraces: Int) {
       //println(s"[Cycle $clock] I-LOAD issued: $seqNum")
       issuedLoads += (seqNum -> pendingReqs(seqNum))
       pendingReqs -= seqNum 
+      nodeStatus(seqNum) = WaitingForAck
       memReqTimes(seqNum) = MemReqTime(seqNum, "Load", 1L)
     }
   }
 
   def acknowledgeLoad(seqNum: Long): Unit = {
     if (issuedLoads.contains(seqNum)) {
-      //println(s"[Cycle $clock] I-LOAD $seqNum acked after ${memReqTimes(seqNum)} Cycles")
+      println(s"[Cycle $clock] I-LOAD $seqNum acked after ${memReqTimes(seqNum)} Cycles")
       // println(seqNum)
       issuedLoads -= seqNum 
       completed += seqNum
+      nodeStatus(seqNum) = Completed
     }
   }
 
   def incrementLoadTime(seqNum: Long): Unit = {
     if (memReqTimes.contains(seqNum)){
       memReqTimes(seqNum)= MemReqTime(seqNum, "Load", memReqTimes(seqNum).reqTime + 1)
+      if (memReqTimes(seqNum).reqTime >=  WATCH_DOG_TIMEOUT) {
+        println(s"Node timed out: ${memReqTimes(seqNum)}")
+        debug()
+        throw new WatchDogTimeoutError()
+      }
     }else{
       memReqTimes(seqNum) = MemReqTime(seqNum, "Load", 1L)
     }
   }
 
-  def isDone: Boolean = completed.size == nodes.size
+  def isDone: Boolean = (completed.size == nodes.size) && eof
 
   def log(name: String, seqNum: Long): Unit = {
     MemReqLogger.log(name, memReqTimes(seqNum))
+  }
+
+  def debug(): Unit ={
+    for ((seq, node) <- nodes) {
+        if (nodeStatus(seq) != Completed) {
+          println(node)
+      }
+    }
+    for ((seq, node) <- nodes) {
+      if (nodeStatus(seq) != Completed){
+        println(s"NODE: ${seq}, STATUS: ${nodeStatus(seq)}")
+      }
+    }
   }
 }
 
