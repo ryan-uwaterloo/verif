@@ -149,7 +149,7 @@ class TraceLSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     issued_this_req := false.B
   }
 
-  val nmshrs = 4
+  val nmshrs = 8
 
   val last_req_idx = RegInit(0.U(log2Ceil(nmshrs).W))
   val last_req_l_n_s = RegInit(false.B)

@@ -10,8 +10,11 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.subsystem.WithoutTLMonitors
 import freechips.rocketchip.subsystem.RocketCrossingParams
 import freechips.rocketchip.tilelink.TLRegisterNode
+
+//switch between these two to test different backends -> ensure L1 branches are correct as well.
 // import parrp_chisel.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
 import sifive.blocks.inclusivecache.{CacheParameters, InclusiveCache, InclusiveCacheMicroParameters}
+
 import boom.lsu._
 import verif.etrace._
 import freechips.rocketchip.tile._
@@ -413,7 +416,7 @@ class MulticoreTraceTileHarness(
   ))
 
   val ram = if (useTLRAM) {
-    LazyModule(new TLRAM(AddressSet(0x80000000L, 0x0fffffffL), beatBytes = L2beatBytes))
+    LazyModule(new TLRAM(AddressSet(0x00000000L, 0xffffffffL), beatBytes = L2beatBytes))
   } else {
     // You can plug in an AXI4 memory model or a Verilator-backed DRAM
     throw new NotImplementedError("Non-TLRAM backend not implemented yet.")
