@@ -442,7 +442,7 @@ class MulticoreTraceTileHarness(
   // resetVectorNexus := resetVectorSource
 
   InModuleBody { //drive all the diplomatic things in the module
-    val dummyVec = Wire(Vec(16, Bool()))//I'm not sure how to make this happy dynamically without something else blowing up
+    val dummyVec = Wire(Vec(numTiles * numTiles, Bool()))//I'm not sure how to make this happy dynamically without something else blowing up
     dummyVec.foreach(_ := false.B)
     intSource.out.head._1 := dummyVec
     // resetVectorSource.bundle := 0.U
