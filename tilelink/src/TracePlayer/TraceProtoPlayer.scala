@@ -66,7 +66,7 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
 
   private val LOW_WATER = 10    // when to load more
   private val BATCH_LOAD = 200   // how many to load per request
-  private val MAX_NODES_IN_MEMORY = 1000
+  private val MAX_NODES_IN_MEMORY = 10000
   private val WATCH_DOG_TIMEOUT = 10000 //max number of cycles a request could take?
 
   openStream()
@@ -138,73 +138,10 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
       dependencies.remove(seq)
       nodeStatus.remove(seq)
       completed.remove(seq)
-      memReqTimes.remove(seq)
     }
 
     println(s"[Stream] Pruned $excess completed DATA nodes (kept newest ${MAX_NODES_IN_MEMORY})")
   }
-
-  // private def loadTrace(): Unit = {
-  //   //println("hello world from trace reader!")
-  //   val traceFile = new File(traceFileName)
-  //   require(traceFile.exists(), s"Could not find trace file: ${traceFile.getAbsolutePath}")
-  //   val stream = new FileInputStream(traceFile)
-  //   // val stream = getClass.getResourceAsStream(traceFile)
-  //   require(stream != null, s"Could not find trace file: $traceFile")
-
-  //   val gzipStream = new GZIPInputStream(stream)
-  //   val codedInput = CodedInputStream.newInstance(gzipStream)
-
-  //   codedInput.readRawLittleEndian32() // Skip magic
-
-  //   val headerSize = codedInput.readRawVarint32()
-  //   val headerLimit = codedInput.pushLimit(headerSize)
-  //   header = InstDepRecordHeader.parseFrom(codedInput)
-  //   codedInput.popLimit(headerLimit)
-
-  //   println(s"[Header] tickFreq=${header.getTickFreq}  windowSize=${header.getWindowSize}")
-
-  //   var recordCount = 0
-  //   val unlimited = (numTraces == 0)
-
-  //   try {
-  //     while (unlimited || recordCount < numTraces) {
-  //       val msgSize =
-  //         try {
-  //           codedInput.readRawVarint32()
-  //         } catch {
-  //           case _: java.io.EOFException =>
-  //             // normal end of gzip-file
-  //             println(s"[Load] EOF reached after $recordCount records")
-  //             return
-  //         }
-
-  //       val limit = codedInput.pushLimit(msgSize)
-  //       val record =
-  //         try {
-  //           InstDepRecord.parseFrom(codedInput)
-  //         } catch {
-  //           case _: com.google.protobuf.InvalidProtocolBufferException =>
-  //             // This also means EOF or truncated msg
-  //             println(s"[Load] Stopping: Invalid or truncated protobuf after $recordCount records")
-  //             return
-  //         }
-
-  //       codedInput.popLimit(limit)
-
-  //       addFromRecord(record)
-  //       recordCount += 1
-  //     }
-  //   } finally {
-  //     gzipStream.close()
-  //   }
-
-  //   // After parsing all nodes
-  //   nodes.keys.foreach { seq =>
-  //     nodeStatus(seq) = NotReady
-  //   }
-
-  // }
 
   private def addFromRecord(record: InstDepRecord): Unit = {
     val nodeType = record.getType match {
@@ -276,6 +213,9 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
 
   // LOAD/STORE completion deferred to ack()
   pruneCompleted()
+
+  // println("data cache player memory sizes:")
+  // println(s"nodes: ${nodes.size} dependencies: ${dependencies.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} issuedStores: ${issuedStores.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
 }
   def getPendingReq: Option[TraceNode] = pendingReqs.headOption.map(_._2)
 
@@ -346,7 +286,7 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
     }
   }
 
-  def isDone: Boolean = (completed.size == nodes.size) && eof
+  def isDone: Boolean = (completed.size >= nodes.size) && eof
 
   def debug(): Unit ={
     for ((seq, node) <- nodes) {
@@ -369,6 +309,7 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
 
   def log(name: String, seqNum: Long): Unit = {
     MemReqLogger.log(name, memReqTimes(seqNum))
+    memReqTimes.remove(seqNum)
   }
 }
 
@@ -476,7 +417,6 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
       nodes.remove(seq)
       nodeStatus.remove(seq)
       completed.remove(seq)
-      memReqTimes.remove(seq)
     }
 
     println(s"[Stream] Pruned $excess completed INST nodes (kept newest ${MAX_NODES_IN_MEMORY})")
@@ -573,6 +513,9 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
 
     // LOAD/STORE completion deferred to ack()
     pruneCompleted()
+
+    // println("inst cache player memory sizes:")
+    // println(s"nodes: ${nodes.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
   }
 
   def getPendingReq: Option[InstNode] = pendingReqs.headOption.map(_._2)
@@ -616,6 +559,7 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
 
   def log(name: String, seqNum: Long): Unit = {
     MemReqLogger.log(name, memReqTimes(seqNum))
+    memReqTimes.remove(seqNum)
   }
 
   def debug(): Unit ={
