@@ -213,9 +213,10 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
 
   // LOAD/STORE completion deferred to ack()
   pruneCompleted()
-
-  // println("data cache player memory sizes:")
-  // println(s"nodes: ${nodes.size} dependencies: ${dependencies.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} issuedStores: ${issuedStores.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
+  if(eof && !isDone){
+    println("data cache player memory sizes:")
+    println(s"nodes: ${nodes.size} dependencies: ${dependencies.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} issuedStores: ${issuedStores.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
+  }
 }
   def getPendingReq: Option[TraceNode] = pendingReqs.headOption.map(_._2)
 
@@ -286,7 +287,7 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
     }
   }
 
-  def isDone: Boolean = (completed.size >= nodes.size) && eof
+  def isDone: Boolean = (completed.size == nodes.size) && eof
 
   def debug(): Unit ={
     for ((seq, node) <- nodes) {
@@ -308,8 +309,12 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
   }
 
   def log(name: String, seqNum: Long): Unit = {
-    MemReqLogger.log(name, memReqTimes(seqNum))
-    memReqTimes.remove(seqNum)
+    memReqTimes.remove(seqNum) match {
+      case Some(time) =>
+        MemReqLogger.log(name, time)
+      case None =>
+        println(s"[WARN] log() called for missing seqNum=$seqNum")
+    }
   }
 }
 
@@ -514,8 +519,10 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
     // LOAD/STORE completion deferred to ack()
     pruneCompleted()
 
-    // println("inst cache player memory sizes:")
-    // println(s"nodes: ${nodes.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
+    if(eof && !isDone){
+      println("inst cache player memory sizes:")
+      println(s"nodes: ${nodes.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
+    }
   }
 
   def getPendingReq: Option[InstNode] = pendingReqs.headOption.map(_._2)
@@ -558,8 +565,12 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
   def isDone: Boolean = (completed.size == nodes.size) && eof
 
   def log(name: String, seqNum: Long): Unit = {
-    MemReqLogger.log(name, memReqTimes(seqNum))
-    memReqTimes.remove(seqNum)
+    memReqTimes.remove(seqNum) match {
+      case Some(time) =>
+        MemReqLogger.log(name, time)
+      case None =>
+        println(s"[WARN] log() called for missing seqNum=$seqNum")
+    }
   }
 
   def debug(): Unit ={
