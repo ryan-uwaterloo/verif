@@ -44,7 +44,7 @@ case class MemReqTime(
 
 case class WatchDogTimeoutError() extends Exception() {}
 
-class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
+class ElasticTraceDAG(traceFileName: String, dagID: String) {//, numTraces: Int) {
   private val nodes = mutable.Map[Long, TraceNode]()
   private val dependencies = mutable.Map[Long, Set[Long]]()
   private val completed = mutable.Set[Long]()
@@ -55,6 +55,8 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
   private val issuedStores = mutable.LinkedHashMap[Long, TraceNode]()
   private val pendingReqs = mutable.LinkedHashMap[Long, TraceNode]()
   private val memReqTimes = mutable.Map[Long, MemReqTime]()
+
+  private val logger = new MemReqLogger(s"test_run_dir/mem_req_times/${dagID}_data.csv")
   
   var clock = 0L
   var header: InstDepRecordHeader = _
@@ -67,7 +69,7 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
   private val LOW_WATER = 10    // when to load more
   private val BATCH_LOAD = 200   // how many to load per request
   private val MAX_NODES_IN_MEMORY = 10000
-  private val WATCH_DOG_TIMEOUT = 10000 //max number of cycles a request could take?
+  private val WATCH_DOG_TIMEOUT = 100000 //max number of cycles a request could take?
 
   openStream()
   ensureEnoughReadyNodes()
@@ -311,11 +313,13 @@ class ElasticTraceDAG(traceFileName: String) {//, numTraces: Int) {
   def log(name: String, seqNum: Long): Unit = {
     memReqTimes.remove(seqNum) match {
       case Some(time) =>
-        MemReqLogger.log(name, time)
+        logger.log(name, time)
       case None =>
         println(s"[WARN] log() called for missing seqNum=$seqNum")
     }
   }
+
+  def closeLogger(): Unit = logger.close()
 }
 
 case class InstNode(
@@ -328,7 +332,7 @@ case class InstNode(
   pc: Option[Long]
 )
 
-class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
+class InstTraceDAG(traceFileName: String, dagID: String) {//, numTraces: Int) {
   private val nodes = mutable.Map[Long, InstNode]()
   private val completed = mutable.Set[Long]()
   private val nodeStatus = mutable.Map[Long, NodeStatus]()
@@ -347,7 +351,9 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
   private val LOW_WATER = 10    // when to load more
   private val BATCH_LOAD = 20   // how many to load per request
   private val MAX_NODES_IN_MEMORY = 100 //no deps, store way less (but still something for my sanity)
-  private val WATCH_DOG_TIMEOUT = 10000
+  private val WATCH_DOG_TIMEOUT = 100000
+
+  private val logger = new MemReqLogger(s"test_run_dir/mem_req_times/${dagID}_inst.csv")
 
   openStream()
   ensureEnoughReadyNodes()
@@ -567,11 +573,13 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
   def log(name: String, seqNum: Long): Unit = {
     memReqTimes.remove(seqNum) match {
       case Some(time) =>
-        MemReqLogger.log(name, time)
+        logger.log(name, time)
       case None =>
         println(s"[WARN] log() called for missing seqNum=$seqNum")
     }
   }
+
+  def closeLogger(): Unit = logger.close()
 
   def debug(): Unit ={
     for ((seq, node) <- nodes) {
@@ -587,21 +595,18 @@ class InstTraceDAG(traceFileName: String) {//, numTraces: Int) {
   }
 }
 
-object MemReqLogger {
-  private val logFile = new BufferedWriter(new FileWriter("test_run_dir/mem_req_times/mem_req_time.csv", false))
+class MemReqLogger(filePath: String) {
+  private val logFile = new BufferedWriter(new FileWriter(filePath, false))
   private var headerWritten = false
-  println("Working directory: " + new java.io.File(".").getAbsolutePath)
 
-
-  /** Write one entry to the CSV log */
-  def log(dagID: String, memReqTime: MemReqTime): Unit = synchronized {
+  def log(dagID: String, memReqTime: MemReqTime): Unit = {
     if (!headerWritten) {
       logFile.write("dagID,blockID,nodeType,reqTime\n")
       headerWritten = true
     }
     logFile.write(s"$dagID,${memReqTime.seqNum},${memReqTime.nodeType},${memReqTime.reqTime}\n")
-    logFile.flush()
   }
 
+  def flush(): Unit = logFile.flush()
   def close(): Unit = logFile.close()
 }
