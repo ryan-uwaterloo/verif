@@ -325,7 +325,7 @@ class ElasticTraceDAG(traceFileName: String, dagID: String) {//, numTraces: Int)
 case class InstNode(
   tick: Long,
   cmd: Int,
-  addr: Int,
+  addr: Long,
   size: Int,
   flags: Option[Int],
   pkt_id: Option[Long],
@@ -499,7 +499,7 @@ class InstTraceDAG(traceFileName: String, dagID: String) {//, numTraces: Int) {
     val node = InstNode(
       tick    = record.getTick.toLong,
       cmd     = record.getCmd.toInt,
-      addr    = record.getAddr.toInt,
+      addr    = record.getAddr.toLong,
       size    = record.getSize.toInt,
       flags   = if (record.hasFlags) Some(record.getFlags.toInt) else None,
       pkt_id  = if (record.hasPktId) Some(record.getPktId.toLong) else None,
