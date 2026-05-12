@@ -215,7 +215,7 @@ class ElasticTraceDAG(traceFileName: String, dagID: String) {//, numTraces: Int)
 
   // LOAD/STORE completion deferred to ack()
   pruneCompleted()
-  if(eof && !isDone){
+  if(eof && !isDone && (clock % 10000 == 0)){
     println("data cache player memory sizes:")
     println(s"nodes: ${nodes.size} dependencies: ${dependencies.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} issuedStores: ${issuedStores.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
   }
@@ -525,7 +525,7 @@ class InstTraceDAG(traceFileName: String, dagID: String) {//, numTraces: Int) {
     // LOAD/STORE completion deferred to ack()
     pruneCompleted()
 
-    if(eof && !isDone){
+    if(eof && !isDone && (clock % 10000 == 0)){
       println("inst cache player memory sizes:")
       println(s"nodes: ${nodes.size} completed: ${completed.size} nodeStatus: ${nodeStatus.size} issuedLoads: ${issuedLoads.size} pendingReqs: ${pendingReqs.size} memReqTimes: ${memReqTimes.size}")
     }
