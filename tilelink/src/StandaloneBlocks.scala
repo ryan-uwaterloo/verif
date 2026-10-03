@@ -392,14 +392,23 @@ class MulticoreTraceTileHarness(
   val L2sets:         Int = 4,
   val L2blockBytes:   Int = 64,
   val L2beatBytes:    Int = 8,
-  val nL1MSHRs:       Int = 4
+  val nL1MSHRs:       Int = 4,
+  val memLatency:     Int = 100,
+  val memBandwidth:   Int = 10,
+  val shimType:       String = "split"
 )(implicit p: Parameters = new WithoutTLMonitors) extends LazyModule with BindingScope {
 
   // Shared memory hierarchy
   val tlxbar = LazyModule(new TLXbar)
   val buffer = LazyModule(new TLBuffer)
 
-  val cork = LazyModule(new TLCacheCork)
+  val cork = LazyModule(new TLCacheCork(
+    TLCacheCorkParams(
+      ram_latency = memLatency,
+      ram_bandiwdth = memBandwidth,
+      writeBufEntries = numTiles * (nL1MSHRs + 1) * 4
+    )
+  ))
 
 
   val l2 = LazyModule(new InclusiveCache(
@@ -411,7 +420,11 @@ class MulticoreTraceTileHarness(
       beatBytes = L2beatBytes,
       hintsSkipProbe = false
     ),
-    InclusiveCacheMicroParameters(writeBytes = L2beatBytes),
+    InclusiveCacheMicroParameters(
+      writeBytes = L2beatBytes, 
+      memCycles = 40,
+      numMSHRs = numTiles * 5
+      ),
     None
   ))
 

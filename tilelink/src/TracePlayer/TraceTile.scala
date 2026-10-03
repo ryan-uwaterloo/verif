@@ -140,8 +140,17 @@ class TraceTile private(
   val dCacheTap = TLIdentityNode()
   tlMasterXbar.node := dCacheTap := TLWidthWidget(tileParams.dcache.get.rowBits/8) := visibilityNode := dcache.node
 
+  // Tile params with a 1-MSHR dcache config, used only for the "icache"
+  private val icacheTileParams = boomParams.copy(
+    dcache = Some(boomParams.dcache.get.copy(nMSHRs = 1))
+  )
+  val icacheP = p.alterPartial { case TileKey => icacheTileParams }
+
+  lazy val icache: BoomNonBlockingDCache =
+    LazyModule(new BoomNonBlockingDCache(tileId)(icacheP))
+
   // Frontend/ICache
-  lazy val icache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(tileId))
+  // lazy val icache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(tileId))
   val iCacheTap = TLIdentityNode()
   tlMasterXbar.node := iCacheTap := TLWidthWidget(tileParams.dcache.get.rowBits/8) := visibilityNode := icache.node
 
@@ -150,6 +159,7 @@ class TraceTile private(
 //   tlMasterXbar.node := TLWidthWidget(tileParams.icache.get.rowBits/8) := frontend.masterNode
 
   println(s"dcache params: ${tileParams.dcache}\n")
+  println(s"icache params: ${icacheTileParams.dcache}\n")
   // println(s"dcache params: ${tileParams.icache}\n")
   // require(tileParams.dcache.get.rowBits == tileParams.icache.get.rowBits)
 }
@@ -165,7 +175,7 @@ class TraceTileModuleImp(outer: TraceTile) extends BaseTileModuleImp(outer){
 
   //val core = Module(new BoomCore()(outer.p))
   val lsu  = Module(new TraceLSU()(outer.p, outer.dcache.module.edge))
-  val i_lsu = Module(new TraceLSU()(outer.p, outer.icache.module.edge))
+  val i_lsu = Module(new TraceLSU()(outer.icacheP, outer.icache.module.edge))
 
   // lsu.io.ptw := 0.U.asTypeOf(TLBPTWIO()(outer.p))
   // lsu.io.core := 0.U.asTypeOf(LSUCoreIO()(outer.p))
